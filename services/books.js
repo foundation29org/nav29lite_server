@@ -19,6 +19,12 @@ const accountname = config.BLOB.NAMEBLOB;
 const Document = require('../models/document')
 const Patient = require('../models/patient')
 
+
+async function callNavigator(req, res) {
+	var result = await langchain.navigator_summarize(req.body.userId, req.body.question, req.body.conversation, req.body.context);
+	res.status(200).send(result);
+}
+
   async function analizeDoc(req, res) {
 	res.status(200).send({message: 'ok'})
 	const containerName = req.body.containerName;
@@ -51,28 +57,32 @@ const Patient = require('../models/patient')
   }
 
 
-
-async function createBook(patientId, documentId, containerName, url, filename, userId) {
+async function createBook(documentId, containerName, url, filename) {
+	return new Promise(async function (resolve, reject) {
 		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
 		const configcall = {
 			params: {
-				index: patientId,
 				doc_id: documentId,
 				url: url2,
 				urlanalizeDoc: url,
 				filename: filename,
-				userId: userId, 
-				patientId: patientId,
 				containerName: containerName
 			}
 		};
-		axios.post(config.KUBERNETEURL + '/triggerCreateBook', null, configcall)
+		axios.post(config.KUBERNETEURL + '/triggerExtractLite', null, configcall)
 			.then(async response => {
+				resolve(response.data);
 			})
 			.catch(error => {
 				insights.error(error);
 				console.error(error);
+				var respu = {
+					"msg": error,
+					"status": 500
+				}
+				resolve(respu);
 			});
+		});
 }
 
 async function extractEvents(patientId, documentId, containerName, url, filename, userId) {
@@ -301,6 +311,7 @@ async function deleteDocumentAzure(patientId, documentId){
 
 
 module.exports = {
+	callNavigator,
 	createBook,
 	anonymizeBooks,
 	deleteBook,
