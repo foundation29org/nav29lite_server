@@ -23,6 +23,8 @@ api.get('/langs/',  langCtrl.getLangs)
 // documentsCtrl routes, using the controller documents, this controller has methods
 
 api.post('/upload', docsCtrl.uploadFile)
+api.post('/callnavigator', bookServiceCtrl2.callNavigator)
+
 api.post('/trysummarize/:patientId', docsCtrl.trySummarize)
 api.post('/anonymizedocument/:patientId', docsCtrl.anonymizeDocument)
 

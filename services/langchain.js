@@ -199,66 +199,75 @@ async function translateText(text, deepl_code) {
 // This will take some history of the conversation if any and the current documents if any
 // And will return a proper answer to the question based on the conversation and the documents 
 async function navigator_summarize(userId, question, conversation, context){
-  try {
-    // Create the models
-    const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-    let { model, model32k, claude2 } = createModels(projectName);
-
-    // Format and call the prompt
-    let cleanPatientInfo = "";
-    let i = 1;
-    for (const doc of context) {
-      cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
-      i++;
-    }
-
-    const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
-      `This is part of the medical information of the patient:
-
-      ${cleanPatientInfo}
-
-      You are a medical expert, based on this context with the condensed documents from the patient.`
-    );
-
-    const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
-      `Take a deep breath and work on this problem step-by-step.      
-      Please, answer the following question without making up any information:
-
-      <input>
-      {input}
-      </input>
-      
-      If you don't find the answer or you need more information, please, return that you don't know the answer and ask for more information.`
-    );
-
-    const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
-    
-    let memory;
-    if (conversation === null) {
-      memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
-    } else {
-      memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
-      // Add the conversation history to the memory
-      for (const message of conversation) {
-        memory.addMessage(message);
+  return new Promise(async function (resolve, reject) {
+    try {
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2 } = createModels(projectName);
+  
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        i++;
       }
+  
+      const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `This is part of the medical information of the patient:
+  
+        ${cleanPatientInfo}
+  
+        You are a medical expert, based on this context with the condensed documents from the patient.`
+      );
+  
+      const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Take a deep breath and work on this problem step-by-step.      
+        Please, answer the following question without making up any information:
+  
+        <input>
+        {input}
+        </input>
+        
+        If you don't find the answer or you need more information, please, return that you don't know the answer and ask for more information.`
+      );
+  
+      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
+      
+      let memory;
+      if (conversation === null) {
+        memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
+      } else {
+        memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
+        // Add the conversation history to the memory
+        for (const message of conversation) {
+          memory.addMessage(message);
+        }
+      }
+  
+      const chain = new ConversationChain({
+        memory: memory,
+        prompt: chatPrompt,
+        llm: claude2,
+      });
+      
+      const response = await chain.call({
+        input: question,
+      });
+  
+      console.log(response);
+      resolve(response);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      resolve(respu);
     }
-
-    const chain = new ConversationChain({
-      memory: memory,
-      prompt: chatPrompt,
-      llm: claude2,
-    });
-    
-    const response = await chain.call({
-      input: question,
-    });
-
-    console.log(response);
-  } catch (error) {
-    console.log("Error happened: ", error)
-    insights.error(error);
-  }
+  });
+ 
 }
 
 async function clean_and_extract(patientId, containerName, url, doc_id, filename, userId) {

@@ -17,6 +17,9 @@ async function uploadFile(req, res) {
 		var data1 = await saveBlob('data', req.body.url, req.files.thumbnail);
 		if (data1) {
 			const filename = path.basename(req.body.url);
+			console.log(req.body.docId)
+			console.log(req.body.url)
+			console.log(filename)
 			var result = await bookService.createBook(req.body.docId, containerName, req.body.url, filename);
 			res.status(200).send(result)
 		}

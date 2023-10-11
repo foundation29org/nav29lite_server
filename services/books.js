@@ -19,6 +19,12 @@ const accountname = config.BLOB.NAMEBLOB;
 const Document = require('../models/document')
 const Patient = require('../models/patient')
 
+
+async function callNavigator(req, res) {
+	var result = await langchain.navigator_summarize(req.body.userId, req.body.question, req.body.conversation, req.body.context);
+	res.status(200).send(result);
+}
+
   async function analizeDoc(req, res) {
 	res.status(200).send({message: 'ok'})
 	const containerName = req.body.containerName;
@@ -305,6 +311,7 @@ async function deleteDocumentAzure(patientId, documentId){
 
 
 module.exports = {
+	callNavigator,
 	createBook,
 	anonymizeBooks,
 	deleteBook,
