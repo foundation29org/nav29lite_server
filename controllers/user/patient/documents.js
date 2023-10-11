@@ -9,6 +9,7 @@ const bookService = require("../../../services/books")
 const langchain = require('../../../services/langchain')
 const insights = require('../../../services/insights')
 const f29azureService = require("../../../services/f29azure")
+const path = require('path');
 
 async function uploadFile(req, res) {
 	let containerName = 'data';
@@ -16,8 +17,8 @@ async function uploadFile(req, res) {
 		var data1 = await saveBlob('data', req.body.url, req.files.thumbnail);
 		if (data1) {
 			const filename = path.basename(req.body.url);
-			bookService.createBook(req.body.docId, containerName, req.body.url, filename);
-			res.status(200).send({ message: "Done", docId: docId })
+			var result = await bookService.createBook(req.body.docId, containerName, req.body.url, filename);
+			res.status(200).send(result)
 		}
 	} else {
 		insights.error('Error: no files');

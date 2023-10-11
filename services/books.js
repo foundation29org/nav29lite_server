@@ -52,6 +52,7 @@ const Patient = require('../models/patient')
 
 
 async function createBook(documentId, containerName, url, filename) {
+	return new Promise(async function (resolve, reject) {
 		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
 		const configcall = {
 			params: {
@@ -62,13 +63,20 @@ async function createBook(documentId, containerName, url, filename) {
 				containerName: containerName
 			}
 		};
-		axios.post(config.KUBERNETEURL + '/triggerCreateBook', null, configcall)
+		axios.post(config.KUBERNETEURL + '/triggerExtractLite', null, configcall)
 			.then(async response => {
+				resolve(response.data);
 			})
 			.catch(error => {
 				insights.error(error);
 				console.error(error);
+				var respu = {
+					"msg": error,
+					"status": 500
+				}
+				resolve(respu);
 			});
+		});
 }
 
 async function extractEvents(patientId, documentId, containerName, url, filename, userId) {
