@@ -13,7 +13,8 @@ const { LangChainTracer } = require("langchain/callbacks");
 const { ChatBedrock } = require("langchain/chat_models/bedrock");
 const { ConversationChain } = require("langchain/chains");
 const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder } = require("langchain/prompts");
-const { BufferMemory } = require("langchain/memory");
+const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
+const { HumanChatMessage, AIChatMessage } = require("langchain/schema");
 
 const OPENAI_API_KEY = config.OPENAI_API_KEY;
 const OPENAI_API_VERSION = config.OPENAI_API_VERSION;
@@ -214,11 +215,11 @@ async function navigator_summarize(userId, question, conversation, context){
       }
   
       const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
-        `This is part of the medical information of the patient:
+        `This is a list of the medical information of the patient:
   
         ${cleanPatientInfo}
   
-        You are a medical expert, based on this context with the condensed documents from the patient.`
+        You are a medical expert, based on this context with the medical documents from the patient.`
       );
   
       const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
@@ -229,21 +230,27 @@ async function navigator_summarize(userId, question, conversation, context){
         {input}
         </input>
         
-        If you don't find the answer or you need more information, please, return that you don't know the answer and ask for more information.`
+        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms.`
       );
   
       const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
-      
-      let memory;
-      if (conversation === null) {
-        memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
-      } else {
-        memory = new BufferMemory({ returnMessages: true, memoryKey: "history" });
-        // Add the conversation history to the memory
+     
+      const pastMessages = [];      
+      if (conversation !== null) {
         for (const message of conversation) {
-          memory.addMessage(message);
+          if (message.role === 'user') {
+            pastMessages.push(new HumanChatMessage(message.content));
+          } else if (message.role === 'assistant') {
+            pastMessages.push(new AIChatMessage(message.content));
+          }
         }
       }
+      
+      const memory = new BufferMemory({
+        chatHistory: new ChatMessageHistory(pastMessages),
+        returnMessages: true,
+        memoryKey: "history"
+      });
   
       const chain = new ConversationChain({
         memory: memory,
@@ -255,7 +262,7 @@ async function navigator_summarize(userId, question, conversation, context){
         input: question,
       });
   
-      console.log(response);
+      // console.log(response);
       resolve(response);
     } catch (error) {
       console.log("Error happened: ", error)
@@ -267,7 +274,6 @@ async function navigator_summarize(userId, question, conversation, context){
       resolve(respu);
     }
   });
- 
 }
 
 async function clean_and_extract(patientId, containerName, url, doc_id, filename, userId) {
