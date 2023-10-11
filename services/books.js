@@ -51,18 +51,14 @@ const Patient = require('../models/patient')
   }
 
 
-
-async function createBook(patientId, documentId, containerName, url, filename, userId) {
+async function createBook(documentId, containerName, url, filename) {
 		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
 		const configcall = {
 			params: {
-				index: patientId,
 				doc_id: documentId,
 				url: url2,
 				urlanalizeDoc: url,
 				filename: filename,
-				userId: userId, 
-				patientId: patientId,
 				containerName: containerName
 			}
 		};
