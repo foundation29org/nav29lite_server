@@ -24,6 +24,7 @@ api.get('/langs/',  langCtrl.getLangs)
 
 api.post('/upload', docsCtrl.uploadFile)
 api.post('/callnavigator', bookServiceCtrl2.callNavigator)
+api.post('/callsummary', bookServiceCtrl2.callNavigator)
 
 api.post('/trysummarize/:patientId', docsCtrl.trySummarize)
 api.post('/anonymizedocument/:patientId', docsCtrl.anonymizeDocument)
