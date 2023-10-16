@@ -213,9 +213,11 @@ async function navigator_summarize(userId, question, conversation, context){
         cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
         i++;
       }
-  
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
       const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
-        `This is a list of the medical information of the patient:
+        `This is the list of the medical information of the patient:
   
         ${cleanPatientInfo}
   
@@ -224,13 +226,14 @@ async function navigator_summarize(userId, question, conversation, context){
   
       const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
         `Take a deep breath and work on this problem step-by-step.      
-        Please, answer the following question without making up any information:
+        Please, answer the following question/task with the information you have in context:
   
         <input>
         {input}
         </input>
         
-        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms.`
+        Don't make up any information.
+        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms. Returns the result in html format.`
       );
   
       const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
