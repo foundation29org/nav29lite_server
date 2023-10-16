@@ -6,6 +6,8 @@ const langchain = require('../services/langchain')
 const suggestions = require('../services/suggestions')
 const pubsub = require('../services/pubsub');
 const insights = require('../services/insights')
+const countTokens = require( '@anthropic-ai/tokenizer');
+
 const {
 	SearchClient,
 	SearchIndexClient,
@@ -22,6 +24,11 @@ const Patient = require('../models/patient')
 
 async function callNavigator(req, res) {
 	var result = await langchain.navigator_summarize(req.body.userId, req.body.question, req.body.conversation, req.body.context);
+	res.status(200).send(result);
+}
+
+async function callSummary(req, res) {
+	var result = await langchain.navigator_summarize(req.body.userId, 'Make a summary of the patient', req.body.conversation, req.body.context);
 	res.status(200).send(result);
 }
 
@@ -71,6 +78,8 @@ async function createBook(documentId, containerName, url, filename) {
 		};
 		axios.post(config.KUBERNETEURL + '/triggerExtractLite', null, configcall)
 			.then(async response => {
+				const tokens = countTokens.countTokens(response.data.data);
+				response.data.tokens = tokens;
 				resolve(response.data);
 			})
 			.catch(error => {
@@ -312,6 +321,7 @@ async function deleteDocumentAzure(patientId, documentId){
 
 module.exports = {
 	callNavigator,
+	callSummary,
 	createBook,
 	anonymizeBooks,
 	deleteBook,
