@@ -28,14 +28,15 @@ async function callNavigator(req, res) {
 }
 
 async function callSummary(req, res) {
-	var result = await langchain.navigator_summarize(req.body.userId,`Please extract a rich set of information from the following medical document.
+	let promt = `Please extract a rich set of information from the following medical document.
 	Everything that could be useful for an expert doctor to understand the patient's situation.
 	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
 	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
 	Starting with an overview of the document type and its purpose, (Always start with: The document you just uploaded is a [document type] and its purpose is to [purpose])
 	then continue with an introduction of the patient,
 	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
-	then if necessary, add non-medical information but relevant into the "Other" category.`, req.body.conversation, req.body.context);
+	then if necessary, add non-medical information but relevant into the "Other" category.`;
+	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	res.status(200).send(result);
 }
 
