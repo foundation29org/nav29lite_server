@@ -14,7 +14,7 @@ const { ChatBedrock } = require("langchain/chat_models/bedrock");
 const { ConversationChain } = require("langchain/chains");
 const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder } = require("langchain/prompts");
 const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
-const { HumanChatMessage, AIChatMessage } = require("langchain/schema");
+const { HumanMessage, AIMessage } = require("langchain/schema");
 
 const OPENAI_API_KEY = config.OPENAI_API_KEY;
 const OPENAI_API_VERSION = config.OPENAI_API_VERSION;
@@ -241,11 +241,16 @@ async function navigator_summarize(userId, question, conversation, context){
       const pastMessages = [];      
       if (conversation !== null) {
         for (const message of conversation) {
-          if (message.role === 'user') {
-            pastMessages.push(new HumanChatMessage(message.content));
-          } else if (message.role === 'assistant') {
-            pastMessages.push(new AIChatMessage(message.content));
-          }
+          console.log(message.content);
+          // Check if message.content is not null and is a string
+          if (message.content && typeof message.content === 'string') {
+            console.log("Message content is a string");
+            if (message.role === 'user') {
+              pastMessages.push(new HumanMessage({ content: message.content }));
+            } else if (message.role === 'assistant') {
+              pastMessages.push(new AIMessage({ content: message.content }));
+            }
+        }
         }
       }
       
