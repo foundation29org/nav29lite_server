@@ -241,10 +241,8 @@ async function navigator_summarize(userId, question, conversation, context){
       const pastMessages = [];      
       if (conversation !== null) {
         for (const message of conversation) {
-          console.log(message.content);
           // Check if message.content is not null and is a string
           if (message.content && typeof message.content === 'string') {
-            console.log("Message content is a string");
             if (message.role === 'user') {
               pastMessages.push(new HumanMessage({ content: message.content }));
             } else if (message.role === 'assistant') {
@@ -266,9 +264,22 @@ async function navigator_summarize(userId, question, conversation, context){
         llm: claude2,
       });
       
-      const response = await chain.call({
-        input: question,
-      });
+      let response;
+      try {
+        response = await chain.call({
+          input: question,
+        });
+      } catch (error) {
+        if (error.message.includes('Error 429')) {
+          console.log("Rate limit exceeded, waiting and retrying...");
+          await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+          response = await chain.call({
+            input: question,
+          });
+        } else {
+          throw error;
+        }
+      }
   
       // console.log(response);
       resolve(response);
