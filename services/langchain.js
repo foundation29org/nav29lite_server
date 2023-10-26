@@ -263,17 +263,22 @@ async function navigator_summarize(userId, question, conversation, context){
         prompt: chatPrompt,
         llm: claude2,
       });
+
+      const chain_retry = chain.withRetry({
+        stopAfterAttempt: 3,
+      });
+
       
       let response;
       try {
-        response = await chain.call({
+        response = await chain_retry.invoke({
           input: question,
         });
       } catch (error) {
         if (error.message.includes('Error 429')) {
           console.log("Rate limit exceeded, waiting and retrying...");
           await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
-          response = await chain.call({
+          response = await chain_retry.invoke({
             input: question,
           });
         } else {
