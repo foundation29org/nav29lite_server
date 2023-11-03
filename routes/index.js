@@ -11,6 +11,7 @@ const bookServiceCtrl2 = require('../services/books')
 const docsCtrl = require('../controllers/user/patient/documents')
 const taCtrl = require('../services/ta')
 const cors = require('cors');
+const serviceEmail = require('../services/email')
 
 const api = express.Router()
 
