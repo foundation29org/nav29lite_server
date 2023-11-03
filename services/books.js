@@ -102,37 +102,39 @@ function convertTableToMarkdown(table) {
 	return markdownTable;
 }
 
-function findTableKeywords(table) {
-	let startKeywords = [];
-	let endKeywords = [];
-	
-	// Gather starting keywords from the first row
-	for (let col = 0; col < Math.min(5, table.columnCount); col++) {
-	  let cell = table.cells.find(c => c.rowIndex === 0 && c.columnIndex === col);
-	  if (cell && cell.content.trim() !== "") startKeywords.push(cell.content);
-	}
-	
-	// Gather ending keywords from the last row, starting from the last column and going backwards
-	for (let col = table.columnCount - 1; col >= 0 && endKeywords.length < 5; col--) {
-	  let cell = table.cells.find(c => c.rowIndex === table.rowCount - 1 && c.columnIndex === col);
-	  if (cell && cell.content.trim() !== "") endKeywords.unshift(cell.content);  // Using unshift to maintain the original order
-	}
-  
-	// If not enough non-empty ending keywords, loop through other rows
-	let lastRow = table.rowCount - 1;
-	while (endKeywords.length < 5 && lastRow > 0) {
-	  lastRow--;
-	  for (let col = table.columnCount - 1; col >= 0 && endKeywords.length < 5; col--) {
-		let cell = table.cells.find(c => c.rowIndex === lastRow && c.columnIndex === col);
-		if (cell && cell.content.trim() !== "") endKeywords.unshift(cell.content);
-	  }
-	}
-	
-	return {
-	  start: startKeywords.join(" "),
-	  end: endKeywords.join(" ")
-	};
-  }
+function findTableKeywords(table, numWordsToConsider = 8) {
+    let startKeywords = [];
+    let endKeywords = [];
+
+    const getCellContent = (row, col) => {
+        let cell = table.cells.find(c => c.rowIndex === row && c.columnIndex === col);
+        return cell ? cell.content.trim() : "";
+    };
+
+    // Gather starting keywords
+    for (let row = 0; row < table.rowCount && startKeywords.length < numWordsToConsider; row++) {
+        for (let col = 0; col < table.columnCount && startKeywords.length < numWordsToConsider; col++) {
+            let content = getCellContent(row, col);
+            if (content) startKeywords.push(content);
+        }
+    }
+
+    // Gather ending keywords
+    let lastRow = table.rowCount - 1;
+    while (endKeywords.length < numWordsToConsider && lastRow >= 0) {
+        for (let col = table.columnCount - 1; col >= 0 && endKeywords.length < numWordsToConsider; col--) {
+            let content = getCellContent(lastRow, col);
+            if (content) endKeywords.unshift(content);
+        }
+        lastRow--;
+    }
+
+    return {
+        start: startKeywords.join(" "),
+        end: endKeywords.join(" ")
+    };
+}
+
 
 function normalizeText(text) {
 	return text.replace(/\n/g, " ").replace(/\s+/g, " ").toLowerCase();
@@ -168,7 +170,7 @@ async function form_recognizer(documentId, containerName, url) {
 	let lastEndIndex = 0;  // Keep track of where the last table ended
 	let failedTables = 0;  // Initialize a counter for failed tables
 
-	console.log(normalizeText(content))
+	// console.log(normalizeText(content))
 
 	// 2. Localize tables in "content" and store table indices in a dictionary for potential second search
 	let tableIndices = {};
@@ -181,23 +183,17 @@ async function form_recognizer(documentId, containerName, url) {
 		let normalizedStart = normalizeText(tableKeywords.start);
 		let normalizedEnd = normalizeText(tableKeywords.end);
 
-		console.log(`Normalized table keywords start: ${normalizedStart}`);
-		console.log(`Normalized table keywords end: ${normalizedEnd}`);
+		// console.log(`Normalized table keywords start: ${normalizedStart}`);
+		// console.log(`Normalized table keywords end: ${normalizedEnd}`);
 
 		// Search for normalized indices
 		let tableStart = normalizedContent.indexOf(normalizedStart, lastEndIndex);
 		let tableEnd = normalizedContent.indexOf(normalizedEnd, tableStart);
-
-		console.log(`Table start index: ${tableStart}, Table end index: ${tableEnd}`);
-            
+		// If found, update lastEndIndex and store the indices
 		if (tableStart !== -1 && tableEnd !== -1) {
-				// Append the content up to the current table to newContent
-				newContent += content.slice(lastEndIndex, tableStart);
-				let insertedString = "\n\n<!-- START TABLE -->\n<div class='markdown-table'>\n" + markdownTable + "\n</div>\n<!-- END TABLE -->\n\n";
-                newContent += insertedString;
 				// Update lastEndIndex to point to the end of the replaced segment in the original content
     			lastEndIndex = tableEnd + normalizedEnd.length;
-                console.log("Table replaced successfully!");
+                console.log("Table found successfully!");
             } else {
                 console.log("Table not found in content. Skipping...");
                 failedTables++;  // Increment the counter for failed tables
@@ -206,57 +202,75 @@ async function form_recognizer(documentId, containerName, url) {
 		tableIndices[index] = {start: tableStart, end: tableEnd, lastEndIndex: lastEndIndex};
 	});
 
-	// // 3. Perform a second search for tables that were not found in the first pass
-	// console.log("Performing second search for missing tables...");
-	// markdownTables.forEach((markdownTable, index) => {
-	// 	let {start: tableStart, end: tableEnd, lastEndIndex} = tableIndices[index];
-	// 	let normalizedContent = normalizeText(content);
+	// 3. Perform a second search for tables that were not found in the first pass only if failedTables > 0
+	if (failedTables > 0) {
+		console.log("Performing second search for missing tables...");
+		markdownTables.forEach((markdownTable, index) => {
+			let {start: tableStart, end: tableEnd, lastEndIndex} = tableIndices[index];
+			let normalizedContent = normalizeText(content);
 
-	// 	// Check if either tableStart or tableEnd is missing
-	// 	if (tableStart === -1 || tableEnd === -1) {
-	// 		console.log(`Attempting second search for table ${index + 1}...`);
+			// Check if either tableStart or tableEnd is missing
+			if (tableStart === -1 || tableEnd === -1) {
+				console.log(`Attempting second search for table ${index + 1}...`);
 
-	// 		// Determine the search space for the next table
-	// 		let nextTableStart = index < markdownTables.length - 1 ? tableIndices[index + 1].start : normalizedContent.length;
+				// Determine the search space for the next table
+				let nextTableStart = index < markdownTables.length - 1 ? tableIndices[index + 1].start : normalizedContent.length;
 
-	// 		let normalizedStart = normalizeText(findTableKeywords(tables[index]).start);
-	// 		let normalizedEnd = normalizeText(findTableKeywords(tables[index]).end);
+				let normalizedStart = normalizeText(findTableKeywords(tables[index]).start);
+				let normalizedEnd = normalizeText(findTableKeywords(tables[index]).end);
 
-	// 		// If only tableStart is found
-	// 		if (tableStart !== -1 && tableEnd === -1) {
-	// 			console.log("Using narrowed search for tableEnd...");
-	// 			let threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 10% difference
-	// 			tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
-	// 		}
+				// If only tableStart is found
+				if (tableStart !== -1 && tableEnd === -1) {
+					console.log("Using narrowed search for tableEnd...");
+					let threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 30% difference
+					tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
+				}
 
-	// 		// If only tableEnd is found
-	// 		if (tableStart === -1 && tableEnd !== -1) {
-	// 			console.log("Using narrowed search for tableStart...");
-	// 			let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 10% difference
-	// 			tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, tableEnd), normalizedStart, threshold) + lastEndIndex;
-	// 		}
+				// If only tableEnd is found
+				if (tableStart === -1 && tableEnd !== -1) {
+					console.log("Using narrowed search for tableStart...");
+					let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 30% difference
+					tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, tableEnd), normalizedStart, threshold) + lastEndIndex;
+				}
 
-	// 		// If neither is found, perform a narrowed search
-	// 		if (tableStart === -1 && tableEnd === -1) {
-	// 			console.log("Using narrowed search for both tableStart and tableEnd...");
-	// 			let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 10% difference
-	// 			tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, nextTableStart), normalizedStart, threshold) + lastEndIndex;
-	// 			threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 10% difference
-	// 			tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
-	// 		}
+				// If neither is found, perform a narrowed search
+				if (tableStart === -1 && tableEnd === -1) {
+					console.log("Using narrowed search for both tableStart and tableEnd...");
+					let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 30% difference
+					tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, nextTableStart), normalizedStart, threshold) + lastEndIndex;
+					threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 30% difference
+					tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
+				}
 
-	// 		// If found in the second search, replace the table in newContent
-	// 		if (tableStart !== -1 && tableEnd !== -1) {
-	// 			console.log("Table found in second search!: ", tableStart, tableEnd);
-	// 			newContent += content.slice(lastEndIndex, tableStart);
-	// 			let insertedString = "\n\n<!-- START TABLE -->\n<div class='markdown-table'>\n" + markdownTable + "\n</div>\n<!-- END TABLE -->\n\n";
-	// 			newContent += insertedString;
-	// 			console.log("Table replaced successfully in second search!");
-	// 		} else {
-	// 			console.log("Table still not found in second search. Skipping...");
-	// 		}
-	// 	}
-	// });
+				// If found in the second search, decrement the counter for failed tables and save the indices
+				if (tableStart !== -1 && tableEnd !== -1) {
+					console.log("Table found in second search!: ", tableStart, tableEnd);
+					failedTables--;  // Decrement the counter for failed tables
+				} else {
+					console.log("Table still not found in second search. Skipping...");
+				}
+				// Update tableIndices
+				tableIndices[index].start = tableStart;
+				tableIndices[index].end = tableEnd;
+				tableIndices[index].lastEndIndex = tableEnd + normalizedEnd.length;
+			}
+		});
+	}
+	// Now with all the tables found, we can replace them in the original content
+	markdownTables.forEach((markdownTable, index) => {
+		let {start: tableStart, end: tableEnd} = tableIndices[index];
+		let lastEndIndex = index === 0 ? 0 : tableIndices[index - 1].lastEndIndex;
+		console.log(`Replacing table ${index + 1}...`);
+		console.log(`Table start index: ${tableStart}, Table end index: ${tableEnd}, Last end index: ${lastEndIndex}`);
+		// If table is found, replace it in newContent
+		if (tableStart !== -1 && tableEnd !== -1) {
+			// Append content up to the current table
+			newContent += content.slice(lastEndIndex, tableStart);
+			// Insert the Markdown table
+			let insertedString = "\n\n<!-- START TABLE -->\n<div class='markdown-table'>\n" + markdownTable + "\n</div>\n<!-- END TABLE -->\n\n";
+			newContent += insertedString;
+		}
+	});
 
 	// Append the remaining content to newContent
 	newContent += content.slice(lastEndIndex);
