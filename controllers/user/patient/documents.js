@@ -20,7 +20,8 @@ async function uploadFile(req, res) {
 			console.log(req.body.docId)
 			console.log(req.body.url)
 			console.log(filename)
-			var result = await bookService.createBook(req.body.docId, containerName, req.body.url, filename);
+			var result = await bookService.form_recognizer(req.body.docId, containerName, req.body.url)
+			// var result = await bookService.createBook(req.body.docId, containerName, req.body.url, filename);
 			res.status(200).send(result)
 		}
 	} else {

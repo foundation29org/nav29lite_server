@@ -10,11 +10,41 @@ const openAIserviceCtrl = require('../services/openai')
 const bookServiceCtrl2 = require('../services/books')
 const docsCtrl = require('../controllers/user/patient/documents')
 const taCtrl = require('../services/ta')
-
+const cors = require('cors');
 
 const api = express.Router()
 
+const whitelist = ['https://nav29lite.azurewebsites.net'];
+//const whitelist = ['https://nav29lite.azurewebsites.net', 'http://localhost:4200'];
 
+  // Middleware personalizado para CORS
+  function corsWithOptions(req, res, next) {
+    const corsOptions = {
+      origin: function (origin, callback) {
+        console.log(origin);
+        if (whitelist.includes(origin)) {
+          callback(null, true);
+        } else {
+            // La IP del cliente
+            const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+            const requestInfo = {
+                method: req.method,
+                url: req.url,
+                headers: req.headers,
+                origin: origin,
+                body: req.body, // Asegúrate de que el middleware para parsear el cuerpo ya haya sido usado
+                ip: clientIp,
+                params: req.params,
+                query: req.query,
+              };
+            serviceEmail.sendMailControlCall(requestInfo)
+            callback(new Error('Not allowed by CORS'));
+        }
+      },
+    };
+  
+    cors(corsOptions)(req, res, next);
+  }
 
 // lang routes, using the controller lang, this controller has methods
 api.get('/langs/',  langCtrl.getLangs)
@@ -22,28 +52,28 @@ api.get('/langs/',  langCtrl.getLangs)
 
 // documentsCtrl routes, using the controller documents, this controller has methods
 
-api.post('/upload', docsCtrl.uploadFile)
-api.post('/callnavigator', bookServiceCtrl2.callNavigator)
-api.post('/callsummary', bookServiceCtrl2.callSummary)
+api.post('/upload', corsWithOptions, docsCtrl.uploadFile)
+api.post('/callnavigator', corsWithOptions, bookServiceCtrl2.callNavigator)
+api.post('/callsummary', corsWithOptions, bookServiceCtrl2.callSummary)
 
-api.post('/trysummarize/:patientId', docsCtrl.trySummarize)
-api.post('/anonymizedocument/:patientId', docsCtrl.anonymizeDocument)
+api.post('/trysummarize/:patientId', corsWithOptions, docsCtrl.trySummarize)
+api.post('/anonymizedocument/:patientId', corsWithOptions, docsCtrl.anonymizeDocument)
 
-api.post('/analizeDoc', bookServiceCtrl2.analizeDoc)
+api.post('/analizeDoc', corsWithOptions, bookServiceCtrl2.analizeDoc)
 
 //services OPENAI
-api.post('/callopenaicontext', openAIserviceCtrl.callOpenAiContext)
+api.post('/callopenaicontext', corsWithOptions, openAIserviceCtrl.callOpenAiContext)
 
 //translations
-api.post('/getDetectLanguage', translationCtrl.getDetectLanguage)
-api.post('/translation', translationCtrl.getTranslationDictionary)
-api.post('/translationinvert', translationCtrl.getTranslationDictionaryInvert)
-api.post('/translationinvertarray', translationCtrl.getTranslationDictionaryInvert2)
-api.post('/deepltranslationinvert', translationCtrl.getdeeplTranslationDictionaryInvert)
-api.post('/translation/segments', translationCtrl.getTranslationSegments)
+api.post('/getDetectLanguage', corsWithOptions, translationCtrl.getDetectLanguage)
+api.post('/translation', corsWithOptions, translationCtrl.getTranslationDictionary)
+api.post('/translationinvert', corsWithOptions, translationCtrl.getTranslationDictionaryInvert)
+api.post('/translationinvertarray', corsWithOptions, translationCtrl.getTranslationDictionaryInvert2)
+api.post('/deepltranslationinvert', corsWithOptions, translationCtrl.getdeeplTranslationDictionaryInvert)
+api.post('/translation/segments', corsWithOptions, translationCtrl.getTranslationSegments)
 
 //ta
-api.post('/callTextAnalytics', taCtrl.callTextAnalytics)
+api.post('/callTextAnalytics', corsWithOptions, taCtrl.callTextAnalytics)
 
 
 
