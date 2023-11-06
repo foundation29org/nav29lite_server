@@ -233,7 +233,8 @@ async function navigator_summarize(userId, question, conversation, context){
         </input>
         
         Don't make up any information.
-        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms. Returns the result in html format.`
+        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms. 
+        Always return the result in HTML format.`
       );
   
       const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);

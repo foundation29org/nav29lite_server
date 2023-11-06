@@ -256,6 +256,7 @@ async function form_recognizer(documentId, containerName, url) {
 			}
 		});
 	}
+	let appendix = "\n\n<!-- START APPENDIX -->\n<div class='appendix'>\n";
 	// Now with all the tables found, we can replace them in the original content
 	markdownTables.forEach((markdownTable, index) => {
 		let {start: tableStart, end: tableEnd} = tableIndices[index];
@@ -269,13 +270,20 @@ async function form_recognizer(documentId, containerName, url) {
 			// Insert the Markdown table
 			let insertedString = "\n\n<!-- START TABLE -->\n<div class='markdown-table'>\n" + markdownTable + "\n</div>\n<!-- END TABLE -->\n\n";
 			newContent += insertedString;
+		} else {
+			console.log("Table not found. Adding to appendix");
+			appendix += markdownTable;
 		}
 	});
-
 	// Append the remaining content to newContent
 	newContent += content.slice(lastEndIndex);
 	// Log the number of failed tables
 	console.log(`Number of failed tables: ${failedTables}`);
+	if (failedTables > 0) {
+		appendix += "\n</div>\n<!-- END APPENDIX -->\n\n";
+		newContent += appendix;
+	}
+
 	// 3. Actualizar el contenido del documento
 	content = newContent;
 	
