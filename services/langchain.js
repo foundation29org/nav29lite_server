@@ -16,7 +16,8 @@ const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTempl
 const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
 const { HumanMessage, AIMessage } = require("langchain/schema");
 
-const OPENAI_API_KEY = config.OPENAI_API_KEY;
+const AZURE_OPENAI_API_KEY = config.OPENAI_API_KEY;
+const OPENAI_API_KEY = config.OPENAI_API_KEY_J;
 const OPENAI_API_VERSION = config.OPENAI_API_VERSION;
 const OPENAI_API_BASE = config.OPENAI_API_BASE;
 const client = new Client({
@@ -34,7 +35,7 @@ function createModels(projectName) {
   
   const model = new ChatOpenAI({
     modelName: "gpt-4-0613",
-    azureOpenAIApiKey: OPENAI_API_KEY,
+    azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
     azureOpenAIApiInstanceName: OPENAI_API_BASE,
     azureOpenAIApiDeploymentName: "nav29",
@@ -45,7 +46,7 @@ function createModels(projectName) {
   
   const model32k = new ChatOpenAI({
     modelName: "gpt-4-32k-0613",
-    azureOpenAIApiKey: OPENAI_API_KEY,
+    azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
     azureOpenAIApiInstanceName: OPENAI_API_BASE,
     azureOpenAIApiDeploymentName: "test32k",
@@ -67,8 +68,16 @@ function createModels(projectName) {
     timeout: 500000,
     callbacks: [tracer],
   });
+
+  const model128k = new ChatOpenAI({
+    modelName: "gpt-4-1106-preview",
+    openAIApiKey: OPENAI_API_KEY,
+    temperature: 0,
+    timeout: 500000,
+    callbacks: [tracer],
+  });
   
-  return { model, model32k, claude2 };
+  return { model, model32k, claude2, model128k };
 }
 
 const combine_map_prompt = new PromptTemplate({
@@ -204,7 +213,7 @@ async function navigator_summarize(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2 } = createModels(projectName);
+      let { model, model32k, claude2, model128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -262,7 +271,7 @@ async function navigator_summarize(userId, question, conversation, context){
       const chain = new ConversationChain({
         memory: memory,
         prompt: chatPrompt,
-        llm: claude2,
+        llm: model128k,
       });
 
       const chain_retry = chain.withRetry({
