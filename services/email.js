@@ -99,7 +99,7 @@ function sendMailControlCall (req){
       to: TRANSPORTER_OPTIONS.auth.user,
       from: TRANSPORTER_OPTIONS.auth.user,
       bcc: maillistbcc,
-      subject: 'Mensaje para soporte de DxGPT - ControlCall',
+      subject: 'Mensaje para soporte de Nav29Lite - ControlCall',
       template: 'mail_error_control_call/_es',
       context: {
         info: JSON.stringify(req)
