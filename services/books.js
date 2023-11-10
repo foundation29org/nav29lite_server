@@ -27,7 +27,7 @@ const levenshtein = require('js-levenshtein');
 
 
 async function callNavigator(req, res) {
-	var result = await langchain.navigator_summarize(req.body.userId, req.body.question, req.body.conversation, req.body.context);
+	var result = await langchain.navigator_chat(req.body.userId, req.body.question, req.body.conversation, req.body.context);
 	res.status(200).send(result);
 }
 
