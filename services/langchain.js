@@ -80,135 +80,8 @@ function createModels(projectName) {
   return { model, model32k, claude2, model128k };
 }
 
-const combine_map_prompt = new PromptTemplate({
-  inputVariables: ["text"],
-  template: `Write a concise summary of the following text, only including patient information or medical information relevant to the patient, and ESPECIALLY ALWAYS any anomalies found:
-  "{text}"
-  ---
-  CONCISE MEDICAL SUMMARY:
-
-  ---
-  ANOMALIES in the analysis results (if present):
-
-  `,
-});
-
-const combine_prompt = new PromptTemplate({
-  inputVariables: ["text"],
-  template: `Please provide a brief summary of the following medical document,
-  starting with an overview of the document type and its purpose, (Always start with: The document you just uploaded is a [document type] and its purpose is to [purpose])
-  then continue with an introduction of the patient, 
-  then add a list of bullet points highlighting the anomalies found in the analysis results,
-  and finally continue with a list of bullet points highlighting the key patient 
-  or medical information relevant to the patient.
-  The documents to be summarized is provided between the triple quotes.
-  """
-  {text}
-  """
-  ---
-  Don't output anything more than the following JSON. Even if you don't have all the information, you should output ONLY the JSON with all the keys but only the values you have.
-  Please provide your response in the form of a JSON object with the following keys if possible or empty:
-  - 'DocumentPurpose'
-  - 'PatientIntroduction'
-  - 'Anomalies', which should be an array of bullet points.
-  - 'KeyInformation', which should be an array of bullet points.
-  Always output the JSON with that keys at least with "Not provided" if missing.
-  `,
-});
-
-const combine_clean_prompt = new PromptTemplate({
-  inputVariables: ["text"],
-  template: `Return the following text after cleaning it from any irrelevant information.
-  Remember to keep ALL the medical information and the patient information. Or any information related to medical events.
-  Everything that could be useful for an expert doctor to understand the patient's situation.
-  But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
-  The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.
-  The documents to be cleaned is provided between the triple quotes.
-  """
-  {text}
-  """
-  ---
-  CLEANED TEXT:
-  `,
-});
-
-const combine_extract_prompt = new PromptTemplate({
-  inputVariables: ["text"],
-  template: `Please extract a rich set of information from the following medical document.
-  Everything that could be useful for an expert doctor to understand the patient's situation.
-  But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
-  The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
-  Starting with an overview of the document type and its purpose, (Always start with: The document you just uploaded is a [document type] and its purpose is to [purpose])
-  then continue with an introduction of the patient,
-  then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
-  then if necessary, add non-medical information but relevant into the "Other" category,
-  The documents to be extracted is provided between the text tags.
-  <text>{text}</text>
-  ---
-  Output it in a .txt file with the following format:
-  Overview of the document type and its purpose:
-  br
-  Patient introduction:
-  br
-  Medical information:
-  br
-  Other information:
-  ---
-  EXTRACTED TEXT:
-  `,
-});
-
-
-async function getMostCommonLanguage(blobs, containerName) {
-  try {
-    // Get the language of the original documents (download from blob)
-    const languageCounts = {};
-    for (const blob of blobs) {
-      if (blob.endsWith("language.txt")) {
-        const language = 'en';
-        if (languageCounts[language]) {
-          languageCounts[language]++;
-        } else {
-          languageCounts[language] = 1;
-        }
-      }
-    }
-
-    // Find the language with the highest count
-    let mostCommonLanguage = null;
-    let highestCount = 0;
-    for (const language in languageCounts) {
-      if (languageCounts[language] > highestCount) {
-        mostCommonLanguage = language;
-        highestCount = languageCounts[language];
-      }
-    }
-
-    return mostCommonLanguage;
-  } catch (error) {
-    insights.error(error);
-    console.error(error);
-    throw error;
-  }
-}
-
-async function translateText(text, deepl_code) {
-  if (deepl_code == null) {
-    // Do an Inverse Translation
-    const info = [{ "Text": text }];
-    const inverseTranslatedText = await translate.getTranslationDictionaryInvertMicrosoft2(info, doc_lang);
-    return inverseTranslatedText[0].translations[0].text;
-  } else {
-    // Do a Translation
-    return await translate.deepLtranslate(text, deepl_code);
-  }
-}
-
-
 // This function will be a basic conversation with documents (context)
-// This will take some history of the conversation if any and the current documents if any
-// And will return a proper answer to the question based on the conversation and the documents 
-async function navigator_summarize(userId, question, conversation, context){
+async function navigator_chat(userId, question, conversation, context){
   return new Promise(async function (resolve, reject) {
     try {
       // Create the models
@@ -242,8 +115,17 @@ async function navigator_summarize(userId, question, conversation, context){
         </input>
         
         Don't make up any information.
-        Format the answer in the most easy way to understand for a patient. Don't use excessive medical terms. 
-        Always return the result in HTML format.`
+        Your response should:
+        - Be formatted in simple, single-line HTML without line breaks inside elements.
+        - Exclude escape characters like '\\n' within HTML elements.
+        - Avoid unnecessary characters or formatting such as triple quotes around HTML.
+        - Be patient-friendly, minimizing medical jargon.
+    
+        Example of desired HTML format (this is just a formatting example, not related to the input):
+
+        <output example>
+        <div><h3>Example Title</h3><table border='1'><tr><th>Category 1</th><td>Details for category 1</td></tr><tr><th>Category 2</th><td>Details for category 2</td></tr></table><p>Additional information or summary here.</p></div>
+        </output example>`
       );
   
       const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
@@ -310,161 +192,122 @@ async function navigator_summarize(userId, question, conversation, context){
   });
 }
 
-async function clean_and_extract(patientId, containerName, url, doc_id, filename, userId) {
-  try {
-    const message = {"docId": doc_id, "status": "limpiando texto", "filename": filename}
-    pubsub.sendToUser(userId, message)
-    // Create the models
-    const projectName = `${config.LANGSMITH_PROJECT} - ${patientId}`;
-    let { model, model32k, claude2 } = createModels(projectName);
-    
-    let url2 = url.replace(/\/[^\/]*$/, '/extracted_translated.txt');
-    let lang_url = url.replace(/\/[^\/]*$/, '/language.txt');
-    let text, doc_lang;
+
+// This function will be a basic conversation with documents (context)
+// This will take some history of the conversation if any and the current documents if any
+// And will return a proper answer to the question based on the conversation and the documents 
+async function navigator_summarize(userId, question, conversation, context){
+  return new Promise(async function (resolve, reject) {
     try {
-      text = await azure_blobs.downloadBlob(containerName, url2);
-      doc_lang = await azure_blobs.downloadBlob(containerName, lang_url);
-    } catch (error) {
-      insights.error(error);
-      console.error('Error downloading the translated blob:', error);
-      let url3 = url.replace(/\/[^\/]*$/, '/extracted.txt');
-      text = await azure_blobs.downloadBlob(containerName, url3);
-    }
-
-    const res = await claude2.callPrompt(
-      await combine_extract_prompt.formatPromptValue({
-        text: text,
-      })
-    );
-    console.log(res);
-    
-    const blob_response = await azure_blobs.createBlob(containerName, url.replace(/\/[^\/]*$/, '/clean_translated.txt'), res.content)
-
-    deepl_code = await translate.getDeeplCode(doc_lang);
-
-    translatedText = await translateText(res.content, deepl_code);
-    
-    const blob_response2 = await azure_blobs.createBlob(containerName, url.replace(/\/[^\/]*$/, '/clean.txt'), translatedText)
-    
-    // Alert the client that the summary is ready (change status in the message)
-    message.status = "clean ready"
-    pubsub.sendToUser(userId, message)
-  } catch (error) {
-    console.log("Error happened: ", error)
-    insights.error(error);
-    pubsub.sendToUser(userId, {"docId": doc_id, "status": "error cleaning", "filename": filename, "error": error})
-  };
-}
-
-async function anonymize(patientId, containerName, url, doc_id, filename, userId) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      let url2 = url.replace(/\/[^\/]*$/, '/fast_extracted_translated.txt');
-      let lang_url = url.replace(/\/[^\/]*$/, '/language.txt');
-      let text, doc_lang;
-
-      try {
-        // Try to download the translation
-        text = await azure_blobs.downloadBlob(containerName, url2);
-        doc_lang = await azure_blobs.downloadBlob(containerName, lang_url);
-        //.log("Lang: ", doc_lang);
-      } catch (error) {
-        insights.error(error);
-        console.error('Error downloading the translated blob:', error);
-        // Handle the error and make a different call here
-        // For example:
-        let url3 = url.replace(/\/[^\/]*$/, '/fast_extracted.txt');
-        text = await azure_blobs.downloadBlob(containerName, url3);
-      }
-
       // Create the models
-      const projectName = `${config.LANGSMITH_PROJECT} - ${patientId}`;
-      let { model, model32k } = createModels(projectName);
-
-      const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 15000 });
-      const docs = await textSplitter.createDocuments([text]);
-
-      let anonymize_prompt = new PromptTemplate({
-        inputVariables: ["text"],
-        template: `The task is to anonymize the following medical document by replacing any personally identifiable information (PII) with [ANON-N], 
-        where N is the count of characters that have been anonymized. 
-        Only specific information that can directly lead to patient identification needs to be anonymized. This includes but is not limited to: 
-        full names, addresses, contact details, Social Security Numbers, and any unique identification numbers. 
-        However, it's essential to maintain all medical specifics, such as medical history, diagnosis, treatment plans, and lab results, as they are not classified as PII. 
-        The anonymized document should retain the integrity of the original content, apart from the replaced PII. 
-        Avoid including any information that wasn't part of the original document and ensure the output reflects the original content structure and intent, albeit anonymized. 
-        Here is the original document between the triple quotes:
-        ----------------------------------------
-        """
-        {text}
-        """
-        ----------------------------------------
-        ANONYMIZED DOCUMENT:
-        `,
-        });
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k } = createModels(projectName);
   
-  
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        i++;
+      }
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
 
-      // This function creates a document chain prompted to anonymize a set of documents.
-      const chain = new LLMChain({
-        llm: model32k,
-        prompt: anonymize_prompt,          
+      const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `This is the list of the medical information of the patient:
+  
+        ${cleanPatientInfo}
+  
+        You are a medical expert, based on this context with the medical documents from the patient.`
+      );
+  
+      const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Take a deep breath and work on this problem step-by-step.      
+        Please, answer the following question/task with the information you have in context:
+  
+        <input>
+        {input}
+        </input>
+        
+        Don't make up any information.
+        Your response should:
+        - Be formatted in simple, single-line HTML without line breaks inside elements.
+        - Exclude escape characters like '\\n' within HTML elements.
+        - Avoid unnecessary characters around formatting such as triple quotes around HTML.
+        - Be patient-friendly, minimizing medical jargon.
+        
+        Example of desired HTML format (this is just a formatting example, not related to the input):
+        
+        <output example>
+        <div><h3>Example Summary Title</h3><p>This is a placeholder paragraph summarizing the key points. It should be concise and clear.</p><ul><li>Key Point 1</li><li>Key Point 2</li><li>Key Point 3</li></ul><p>Final remarks or conclusion here.</p></div>
+        </output example>`
+      );
+  
+      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
+     
+      const pastMessages = [];      
+      if (conversation !== null) {
+        for (const message of conversation) {
+          // Check if message.content is not null and is a string
+          if (message.content && typeof message.content === 'string') {
+            if (message.role === 'user') {
+              pastMessages.push(new HumanMessage({ content: message.content }));
+            } else if (message.role === 'assistant') {
+              pastMessages.push(new AIMessage({ content: message.content }));
+            }
+        }
+        }
+      }
+      
+      const memory = new BufferMemory({
+        chatHistory: new ChatMessageHistory(pastMessages),
+        returnMessages: true,
+        memoryKey: "history"
+      });
+  
+      const chain = new ConversationChain({
+        memory: memory,
+        prompt: chatPrompt,
+        llm: model128k,
       });
 
-      const message = {"docId": doc_id, "status": "anonimizando documentos", "filename": filename, "step": "anonymize"}
-      pubsub.sendToUser(userId, message)
-      
-      // Iterate over the documents and anonymize them, create a complete document with all the anonymized documents
-      let anonymized_docs = [];
-      for (let i = 0; i < docs.length; i++) {
-        const doc = docs[i];
-        const res = await chain.call({
-          text: doc.pageContent,
-        });
-        anonymized_docs.push(res.text);
-      }
-      const anonymized_text = anonymized_docs.join("\n\n");
+      const chain_retry = chain.withRetry({
+        stopAfterAttempt: 3,
+      });
 
-      // Compare the anonymized text with the original text lengths
-      const anonymized_text_length = anonymized_text.length;
-      const original_text_length = text.length;
-      const reduction = (original_text_length - anonymized_text_length) / original_text_length;
       
-      // Create a blob with the summary
-      const existFile = await azure_blobs.checkBlobExists(containerName,url2);
-      console.log("Exist file: ", existFile);
-      if(existFile){
-        const blob_response = await azure_blobs.createBlob(containerName, url.replace(/\/[^\/]*$/, '/anonymized_translated.txt'), anonymized_text)
-        // Do an Inverse Translation
-        // Check if the doc_lang is available in DeepL
-        deepl_code = await translate.getDeeplCode(doc_lang);
-        if (deepl_code == null) {
-          // Do an Inverse Translation
-          const info = [{ "Text": anonymized_text }];
-          const inverseTranslatedText = await translate.getTranslationDictionaryInvertMicrosoft2(info, doc_lang);
-          source_text = inverseTranslatedText[0].translations[0].text
+      let response;
+      try {
+        response = await chain_retry.invoke({
+          input: question,
+        });
+      } catch (error) {
+        if (error.message.includes('Error 429')) {
+          console.log("Rate limit exceeded, waiting and retrying...");
+          await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+          response = await chain_retry.invoke({
+            input: question,
+          });
         } else {
-          // Do a Translation
-          source_text = await translate.deepLtranslate(anonymized_text, deepl_code);
+          throw error;
         }
-        const blob_response2 = await azure_blobs.createBlob(containerName, url.replace(/\/[^\/]*$/, '/anonymized.txt'), source_text)
       }
-      
-      // Alert the client that the summary is ready (change status in the message)
-      message.status = "anonymize ready"
-      pubsub.sendToUser(userId, message)
-      resolve(true);
+  
+      // console.log(response);
+      resolve(response);
     } catch (error) {
       console.log("Error happened: ", error)
       insights.error(error);
-      pubsub.sendToUser(userId, {"docId": doc_id, "status": "error anonymize", "filename": filename, "error": error, "step": "anonymize"})
-      resolve(false);
-    };
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      resolve(respu);
+    }
   });
 }
 
 module.exports = {
+  navigator_chat,
   navigator_summarize,
-  clean_and_extract,
-  anonymize,
 };

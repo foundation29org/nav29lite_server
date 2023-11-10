@@ -15,8 +15,8 @@ const serviceEmail = require('../services/email')
 
 const api = express.Router()
 
-const whitelist = ['https://nav29lite.azurewebsites.net'];
-//const whitelist = ['https://nav29lite.azurewebsites.net', 'http://localhost:4200'];
+// const whitelist = ['https://nav29lite.azurewebsites.net'];
+const whitelist = ['https://nav29lite.azurewebsites.net', 'http://localhost:4200'];
 
   // Middleware personalizado para CORS
   function corsWithOptions(req, res, next) {
