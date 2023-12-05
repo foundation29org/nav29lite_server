@@ -76,8 +76,18 @@ function createModels(projectName) {
     timeout: 500000,
     callbacks: [tracer],
   });
+
+  const azure128k = new ChatOpenAI({
+    azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
+    azureOpenAIApiVersion: OPENAI_API_VERSION,
+    azureOpenAIApiInstanceName: OPENAI_API_BASE,
+    azureOpenAIApiDeploymentName: "nav29turbo",
+    temperature: 0,
+    timeout: 500000,
+    callbacks: [tracer],
+  });
   
-  return { model, model32k, claude2, model128k };
+  return { model, model32k, claude2, model128k, azure128k };
 }
 
 // This function will be a basic conversation with documents (context)
@@ -86,7 +96,7 @@ async function navigator_chat(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k } = createModels(projectName);
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -153,7 +163,7 @@ async function navigator_chat(userId, question, conversation, context){
       const chain = new ConversationChain({
         memory: memory,
         prompt: chatPrompt,
-        llm: model128k,
+        llm: azure128k,
       });
 
       const chain_retry = chain.withRetry({
@@ -201,7 +211,7 @@ async function navigator_summarize(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k } = createModels(projectName);
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -268,7 +278,7 @@ async function navigator_summarize(userId, question, conversation, context){
       const chain = new ConversationChain({
         memory: memory,
         prompt: chatPrompt,
-        llm: model128k,
+        llm: azure128k,
       });
 
       const chain_retry = chain.withRetry({
