@@ -117,7 +117,7 @@ async function navigator_chat(userId, question, conversation, context){
         Don't make up any information.
         Your response should:
         - Be formatted in simple, single-line HTML without line breaks inside elements.
-        - Exclude escape characters like '\\n' within HTML elements.
+        - ALWAYS Exclude escape characters like '\\n' within HTML elements (example: within tables or lists).
         - Avoid unnecessary characters or formatting such as triple quotes around HTML.
         - Be patient-friendly, minimizing medical jargon.
     
