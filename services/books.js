@@ -6,8 +6,7 @@ const langchain = require('../services/langchain')
 const suggestions = require('../services/suggestions')
 const pubsub = require('../services/pubsub');
 const insights = require('../services/insights')
-const countTokens = require( '@anthropic-ai/tokenizer');
-const { DocumentAnalysisClient } = require("@azure/ai-form-recognizer"); 
+const countTokens = require( '@anthropic-ai/tokenizer'); 
 const {
 	SearchClient,
 	SearchIndexClient,
@@ -20,10 +19,9 @@ const apiKey = config.SEARCH_API_KEY;
 const accountname = config.BLOB.NAMEBLOB;
 const Document = require('../models/document')
 const Patient = require('../models/patient');
-const { response } = require('express');
 const form_recognizer_key = config.FORM_RECOGNIZER_KEY
 const form_recognizer_endpoint = config.FORM_RECOGNIZER_ENDPOINT
-const levenshtein = require('js-levenshtein');
+
 
 
 async function callNavigator(req, res) {
@@ -110,229 +108,55 @@ async function analizeDoc(req, res) {
 	}		
 }
 
-function convertTableToMarkdown(table) {
-	let markdownTable = "|";
-	
-	// Add column headers
-	for (let col = 0; col < table.columnCount; col++) {
-	  markdownTable += ` ${table.cells[col].content} |`;
-	}
-	markdownTable += "\n|";
-	
-	// Add separator
-	for (let col = 0; col < table.columnCount; col++) {
-	  markdownTable += "------|";
-	}
-	markdownTable += "\n";
-	
-	// Add table rows
-	for (let row = 1; row < table.rowCount; row++) {
-	  markdownTable += "|";
-	  for (let col = 0; col < table.columnCount; col++) {
-		let cell = table.cells.find(c => c.rowIndex === row && c.columnIndex === col);
-		markdownTable += ` ${cell ? cell.content : " "} |`;
-	  }
-	  markdownTable += "\n";
-	}
-	return markdownTable;
-}
-
-function findTableKeywords(table, numWordsToConsider = 8) {
-    let startKeywords = [];
-    let endKeywords = [];
-
-    const getCellContent = (row, col) => {
-        let cell = table.cells.find(c => c.rowIndex === row && c.columnIndex === col);
-        return cell ? cell.content.trim() : "";
-    };
-
-    // Gather starting keywords
-    for (let row = 0; row < table.rowCount && startKeywords.length < numWordsToConsider; row++) {
-        for (let col = 0; col < table.columnCount && startKeywords.length < numWordsToConsider; col++) {
-            let content = getCellContent(row, col);
-            if (content) startKeywords.push(content);
-        }
-    }
-
-    // Gather ending keywords
-    let lastRow = table.rowCount - 1;
-    while (endKeywords.length < numWordsToConsider && lastRow >= 0) {
-        for (let col = table.columnCount - 1; col >= 0 && endKeywords.length < numWordsToConsider; col--) {
-            let content = getCellContent(lastRow, col);
-            if (content) endKeywords.unshift(content);
-        }
-        lastRow--;
-    }
-
-    return {
-        start: startKeywords.join(" "),
-        end: endKeywords.join(" ")
-    };
-}
-
-
-function normalizeText(text) {
-	return text.replace(/\n/g, " ").replace(/\s+/g, " ").toLowerCase();
-  }
-
-function findApproximateIndex(content, keyword, threshold) {
-    for (let i = 0; i < content.length - keyword.length + 1; i++) {
-        let substring = content.slice(i, i + keyword.length);
-        if (levenshtein(substring, keyword) <= threshold) {
-            return i;
-        }
-    }
-    return -1;
-}
 
 async function form_recognizer(documentId, containerName, url) {
 	return new Promise(async function (resolve, reject) {
-	var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
-	const client = new DocumentAnalysisClient(form_recognizer_endpoint, new AzureKeyCredential(form_recognizer_key));
+		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
+		const modelId = "prebuilt-layout"; // replace with your model id
+		const endpoint = form_recognizer_endpoint; // replace with your endpoint
+		const apiVersion = "2023-10-31-preview";
+		const analyzeUrl = `${endpoint}/documentintelligence/documentModels/${modelId}:analyze?_overload=analyzeDocument&api-version=${apiVersion}&outputContentFormat=markdown`;
 
-	const poller = await client.beginAnalyzeDocument("prebuilt-layout", url2);
-
-	let {
-		content,
-		pages,
-		tables,
-	} = await poller.pollUntilDone();
+		const headers = {
+			'Ocp-Apim-Subscription-Key': form_recognizer_key
+		  };
+		  
+		  const body = {
+			urlSource: url2
+		  };
+		  
+		  axios.post(analyzeUrl, body, { headers: headers })
+		  .then(async response => {
+			
+			const operationLocation = response.headers['operation-location'];
+			let resultResponse;
+			do {
+			  resultResponse = await axios.get(operationLocation, { headers: headers });
+			  if (resultResponse.data.status !== 'running') {
+				break;
+			  }
+			  await new Promise(resolve => setTimeout(resolve, 1000));
+			} while (true);
+			// console.log(resultResponse);
+			let content = resultResponse.data.analyzeResult.content;
 	
-	let markdownTables = tables.map(table => convertTableToMarkdown(table));
-	// console.log("Converted tables to Markdown:", markdownTables);
-
-	let newContent = "";  // Initialize a string to accumulate the changes
-	let lastEndIndex = 0;  // Keep track of where the last table ended
-	let failedTables = 0;  // Initialize a counter for failed tables
-
-	// console.log(normalizeText(content))
-
-	// 2. Localize tables in "content" and store table indices in a dictionary for potential second search
-	let tableIndices = {};
-	markdownTables.forEach((markdownTable, index) => {
-		console.log(`Processing table ${index + 1}...`);
-		let tableKeywords = findTableKeywords(tables[index]);  // Assuming you have a function findTableKeywords
-		// console.log("Identified table keywords:", tableKeywords);
-		
-		let normalizedContent = normalizeText(content);
-		let normalizedStart = normalizeText(tableKeywords.start);
-		let normalizedEnd = normalizeText(tableKeywords.end);
-
-		// console.log(`Normalized table keywords start: ${normalizedStart}`);
-		// console.log(`Normalized table keywords end: ${normalizedEnd}`);
-
-		// Search for normalized indices
-		let tableStart = normalizedContent.indexOf(normalizedStart, lastEndIndex);
-		let tableEnd = normalizedContent.indexOf(normalizedEnd, tableStart);
-		// If found, update lastEndIndex and store the indices
-		if (tableStart !== -1 && tableEnd !== -1) {
-				// Update lastEndIndex to point to the end of the replaced segment in the original content
-    			lastEndIndex = tableEnd + normalizedEnd.length;
-                console.log("Table found successfully!");
-            } else {
-                console.log("Table not found in content. Skipping...");
-                failedTables++;  // Increment the counter for failed tables
-            }
-		// Store the indices of the tables for a potential second search and the LastEndIndex for narrowing the search
-		tableIndices[index] = {start: tableStart, end: tableEnd, lastEndIndex: lastEndIndex};
-	});
-
-	// 3. Perform a second search for tables that were not found in the first pass only if failedTables > 0
-	if (failedTables > 0) {
-		console.log("Performing second search for missing tables...");
-		markdownTables.forEach((markdownTable, index) => {
-			let {start: tableStart, end: tableEnd, lastEndIndex} = tableIndices[index];
-			let normalizedContent = normalizeText(content);
-
-			// Check if either tableStart or tableEnd is missing
-			if (tableStart === -1 || tableEnd === -1) {
-				console.log(`Attempting second search for table ${index + 1}...`);
-
-				// Determine the search space for the next table
-				let nextTableStart = index < markdownTables.length - 1 ? tableIndices[index + 1].start : normalizedContent.length;
-
-				let normalizedStart = normalizeText(findTableKeywords(tables[index]).start);
-				let normalizedEnd = normalizeText(findTableKeywords(tables[index]).end);
-
-				// If only tableStart is found
-				if (tableStart !== -1 && tableEnd === -1) {
-					console.log("Using narrowed search for tableEnd...");
-					let threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 30% difference
-					tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
-				}
-
-				// If only tableEnd is found
-				if (tableStart === -1 && tableEnd !== -1) {
-					console.log("Using narrowed search for tableStart...");
-					let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 30% difference
-					tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, tableEnd), normalizedStart, threshold) + lastEndIndex;
-				}
-
-				// If neither is found, perform a narrowed search
-				if (tableStart === -1 && tableEnd === -1) {
-					console.log("Using narrowed search for both tableStart and tableEnd...");
-					let threshold = Math.round(normalizedStart.length * 0.3);  // Allowing 30% difference
-					tableStart = findApproximateIndex(normalizedContent.slice(lastEndIndex, nextTableStart), normalizedStart, threshold) + lastEndIndex;
-					threshold = Math.round(normalizedEnd.length * 0.3);  // Allowing 30% difference
-					tableEnd = findApproximateIndex(normalizedContent.slice(tableStart, nextTableStart), normalizedEnd, threshold) + tableStart;
-				}
-
-				// If found in the second search, decrement the counter for failed tables and save the indices
-				if (tableStart !== -1 && tableEnd !== -1) {
-					console.log("Table found in second search!: ", tableStart, tableEnd);
-					failedTables--;  // Decrement the counter for failed tables
-				} else {
-					console.log("Table still not found in second search. Skipping...");
-				}
-				// Update tableIndices
-				tableIndices[index].start = tableStart;
-				tableIndices[index].end = tableEnd;
-				tableIndices[index].lastEndIndex = tableEnd + normalizedEnd.length;
+			var response = {
+			"msg": "done", 
+			"data": content, 
+			"doc_id": documentId, 
+			"status": 200
 			}
+
+			const tokens = countTokens.countTokens(response.data);
+			response.tokens = tokens;
+			resolve(response);
+		})
+		.catch(error => {
+		  console.error("Error in analyzing document:", error);
+		  reject(error);
 		});
-	}
-	let appendix = "\n\n<!-- START APPENDIX -->\n<div class='appendix'>\n";
-	// Now with all the tables found, we can replace them in the original content
-	markdownTables.forEach((markdownTable, index) => {
-		let {start: tableStart, end: tableEnd} = tableIndices[index];
-		let lastEndIndex = index === 0 ? 0 : tableIndices[index - 1].lastEndIndex;
-		console.log(`Replacing table ${index + 1}...`);
-		console.log(`Table start index: ${tableStart}, Table end index: ${tableEnd}, Last end index: ${lastEndIndex}`);
-		// If table is found, replace it in newContent
-		if (tableStart !== -1 && tableEnd !== -1) {
-			// Append content up to the current table
-			newContent += content.slice(lastEndIndex, tableStart);
-			// Insert the Markdown table
-			let insertedString = "\n\n<!-- START TABLE -->\n<div class='markdown-table'>\n" + markdownTable + "\n</div>\n<!-- END TABLE -->\n\n";
-			newContent += insertedString;
-		} else {
-			console.log("Table not found. Adding to appendix");
-			appendix += markdownTable;
-		}
-	});
-	// Append the remaining content to newContent
-	newContent += content.slice(lastEndIndex);
-	// Log the number of failed tables
-	console.log(`Number of failed tables: ${failedTables}`);
-	if (failedTables > 0) {
-		appendix += "\n</div>\n<!-- END APPENDIX -->\n\n";
-		newContent += appendix;
-	}
-
-	// 3. Actualizar el contenido del documento
-	content = newContent;
-	
-	var response = {
-	"msg": "done", 
-	"data": content, 
-	"doc_id": documentId, 
-	"status": 200
-	}
-
-	const tokens = countTokens.countTokens(response.data);
-	response.tokens = tokens;
-	resolve(response);
-	});
+	  }
+	);
   }
 
 async function createBook(documentId, containerName, url, filename) {
