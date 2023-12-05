@@ -72,14 +72,6 @@ async function callSummary(req, res) {
 		and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
 		This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
 		
-	}else if(req.body.role=='pediatric'){
-		promt = `Please provide a comprehensive summary of the patient's medical documents, specifically tailored for pediatric cases. 
-		Include detailed information about the patient's medical condition, focusing on aspects that are particularly relevant in pediatrics, such as growth milestones, developmental markers, and pediatric-specific conditions. 
-		The summary should present diagnoses, treatments, and any other pertinent medical information in a clear and organized manner, suitable for a healthcare professional specializing in pediatrics. 
-		Start with an overview of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and their purpose is [purpose]"), 
-		followed by an introduction of the pediatric patient, a detailed breakdown of medical information into categories like diagnosis, treatment, pediatric considerations, etc., 
-		and include any other relevant information that would assist in a pediatric context.`;
-
 	}
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	res.status(200).send(result);
