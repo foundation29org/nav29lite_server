@@ -32,14 +32,49 @@ async function callNavigator(req, res) {
 }
 
 async function callSummary(req, res) {
-	let promt = `Please extract a rich set of information from the patient medical documents.
+	/*let promt = `Please extract a rich set of information from the patient medical documents.
 	Everything that could be useful for an expert doctor to understand the patient's situation.
 	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
 	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
 	Starting with an overview of the documents type and its purposes, (Always start with: The documents you just uploaded are a [document type] and its purposes are to [purpose])
 	then continue with an introduction of the patient,
 	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
-	then if necessary, add non-medical information but relevant into the "Other" category.`;
+	then if necessary, add non-medical information but relevant into the "Other" category.`;*/
+	let promt = '';
+	if(req.body.role=='physician'){
+		promt = `Please provide a comprehensive and detailed summary of the patient's medical documents. 
+		Include all relevant clinical data, diagnoses, treatment plans, and medications, ensuring the information is precise and thorough for expert medical analysis. 
+		The summary should facilitate a deep understanding of the patient's medical situation, suitable for a healthcare professional. 
+		Start with an overview of the document type and its purposes (Always start with: "The documents you just uploaded are a [document type] and its purposes are to [purpose]"), 
+		followed by the patient introduction, medical details categorized into sections like diagnosis, treatment, medication, etc., 
+		and include any pertinent non-medical information in the "Other" category.`;
+		
+	}else if(req.body.role=='pediatric'){
+		promt = `Please create a simple and engaging summary of the patient's medical documents, tailored for a young audience. 
+		Use clear and straightforward language to explain the patient's medical situation, including any diagnoses and treatments. 
+		The summary should be informative yet easy to understand, enabling a pediatric patient to grasp their health status and ask questions. 
+		Begin with a basic explanation of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and they are important because [purpose]"), 
+		followed by a friendly introduction of the patient, a simplified breakdown of medical information into categories like diagnosis and treatment, 
+		and any other relevant information in an easy-to-understand "Other" category.`;
+		
+	}else if(req.body.role=='adult'){
+		promt = `Please generate a clear and concise summary of the patient's medical documents, suitable for an adult audience. 
+		The summary should include essential information about diagnoses, treatments, and medications, presented in a way that is easy to understand for a non-expert. 
+		Aim to empower the patient with knowledge about their medical situation to facilitate informed discussions with healthcare providers. 
+		Start with a brief overview of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and they help to explain [purpose]"), 
+		followed by an introduction of the patient, a well-organized presentation of medical data in categories like diagnosis, treatment, medication, etc., 
+		and include any relevant additional information in the "Other" category.`;
+		
+	}else if(req.body.role=='transcript'){
+		promt = `Please provide a succinct summary of the conversation transcript. 
+		Focus on identifying and highlighting the main points discussed, any conclusions reached, and specific actions or recommendations mentioned. 
+		The summary should capture the essence of the conversation, making it easy for someone who did not participate in the conversation to understand its key outcomes and takeaways. 
+		Start by briefly describing the context of the conversation (Always start with: "This conversation involves [participants] discussing [main topic]"), 
+		followed by a clear and concise extraction of the most relevant points, 
+		and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
+		This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
+		
+	}
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	res.status(200).send(result);
 }
