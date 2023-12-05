@@ -47,7 +47,7 @@ async function callSummary(req, res) {
 		followed by the patient introduction, medical details categorized into sections like diagnosis, treatment, medication, etc., 
 		and include any pertinent non-medical information in the "Other" category.`;
 		
-	}else if(req.body.role=='pediatric'){
+	}else if(req.body.role=='young'){
 		promt = `Please create a simple and engaging summary of the patient's medical documents, tailored for a young audience. 
 		Use clear and straightforward language to explain the patient's medical situation, including any diagnoses and treatments. 
 		The summary should be informative yet easy to understand, enabling a pediatric patient to grasp their health status and ask questions. 
@@ -72,6 +72,14 @@ async function callSummary(req, res) {
 		and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
 		This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
 		
+	}else if(req.body.role=='pediatric'){
+		promt = `Please provide a comprehensive summary of the patient's medical documents, specifically tailored for pediatric cases. 
+		Include detailed information about the patient's medical condition, focusing on aspects that are particularly relevant in pediatrics, such as growth milestones, developmental markers, and pediatric-specific conditions. 
+		The summary should present diagnoses, treatments, and any other pertinent medical information in a clear and organized manner, suitable for a healthcare professional specializing in pediatrics. 
+		Start with an overview of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and their purpose is [purpose]"), 
+		followed by an introduction of the pediatric patient, a detailed breakdown of medical information into categories like diagnosis, treatment, pediatric considerations, etc., 
+		and include any other relevant information that would assist in a pediatric context.`;
+
 	}
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	res.status(200).send(result);
