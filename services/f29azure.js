@@ -74,11 +74,11 @@ async function createBlob(containerName, url, data) {
   });
 }
 
-async function createBlobSimple(containerName, data, fileName) {
+async function createBlobSimple(containerName, url, data) {
   return new Promise((resolve, reject) => {
     blobService.createBlockBlobFromText(
       containerName, 
-      fileName,
+      url,
       JSON.stringify(data),
       function onResponse(error, result) {
         if(error){
@@ -213,6 +213,7 @@ module.exports = {
   createContainers,
   checkBlobExists,
   createBlob,
+  createBlobSimple,
   deleteBlobsInFolder,
   deleteBlob,
   downloadBlob,
