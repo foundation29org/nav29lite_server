@@ -72,8 +72,6 @@ api.post('/upload', corsWithOptions, checkApiKey, docsCtrl.uploadFile)
 api.post('/callnavigator', corsWithOptions, checkApiKey, bookServiceCtrl2.callNavigator)
 api.post('/callsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummary)
 
-api.post('/trysummarize/:patientId', corsWithOptions, checkApiKey, docsCtrl.trySummarize)
-api.post('/anonymizedocument/:patientId', corsWithOptions, checkApiKey, docsCtrl.anonymizeDocument)
 
 api.post('/analizeDoc', corsWithOptions, checkApiKey, bookServiceCtrl2.analizeDoc)
 

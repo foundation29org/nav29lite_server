@@ -4,6 +4,7 @@ const crypt = require('../services/crypt')
 const axios = require('axios');
 const langchain = require('../services/langchain')
 const suggestions = require('../services/suggestions')
+const f29azureService = require("../services/f29azure")
 const pubsub = require('../services/pubsub');
 const insights = require('../services/insights')
 const countTokens = require( '@anthropic-ai/tokenizer'); 
@@ -74,8 +75,30 @@ async function callSummary(req, res) {
 		
 	}
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
+	if(result.response){
+		let data = {
+			nameFiles: req.body.nameFiles,
+			promt: promt,
+			role: req.body.role,
+			conversation: req.body.conversation,
+			context: req.body.context,
+			result: result.response
+		}
+		let nameurl = req.body.url+'/results/'+makeid(8)+'/summary.json';
+		f29azureService.createBlobSimple('data', nameurl, data);
+	}
 	res.status(200).send(result);
 }
+
+function makeid(length) {
+    var result = '';
+    var characters = '0123456789';
+    var charactersLength = characters.length;
+    for (var i = 0; i < length; i++) {
+      result += Math.floor(Math.random() * charactersLength);
+    }
+    return result;
+  }
 
 async function analizeDoc(req, res) {
 	res.status(200).send({message: 'ok'})
