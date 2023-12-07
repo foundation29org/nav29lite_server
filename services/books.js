@@ -84,21 +84,11 @@ async function callSummary(req, res) {
 			context: req.body.context,
 			result: result.response
 		}
-		let nameurl = req.body.url+'/results/'+makeid(8)+'/summary.json';
+		let nameurl = req.body.paramForm+'/summary.json';
 		f29azureService.createBlobSimple('data', nameurl, data);
 	}
 	res.status(200).send(result);
 }
-
-function makeid(length) {
-    var result = '';
-    var characters = '0123456789';
-    var charactersLength = characters.length;
-    for (var i = 0; i < length; i++) {
-      result += Math.floor(Math.random() * charactersLength);
-    }
-    return result;
-  }
 
 async function analizeDoc(req, res) {
 	res.status(200).send({message: 'ok'})
