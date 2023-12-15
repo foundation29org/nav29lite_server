@@ -90,6 +90,35 @@ async function callSummary(req, res) {
 	res.status(200).send(result);
 }
 
+async function callSummarydx(req, res) {
+	/*let promt = `Please extract a rich set of information from the patient medical documents.
+	Everything that could be useful for an expert doctor to understand the patient's situation.
+	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
+	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
+	Starting with an overview of the documents type and its purposes, (Always start with: The documents you just uploaded are a [document type] and its purposes are to [purpose])
+	then continue with an introduction of the patient,
+	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
+	then if necessary, add non-medical information but relevant into the "Other" category.`;*/
+	//let promt = 'Analyze the report and extract phenotypic characteristics, symptoms, test results, and other clinical details indicative of rare diseases. Provide a concise summary that highlights any findings potentially relevant for the diagnosis of rare diseases.';
+	//let promt = 'Analyze the medical report and provide a concise summary that lists all the symptoms in a single paragraph. Exclude any mention of diseases, medications, genetic information, or test results.';
+	let promt = 'Provide a paragraph listing only the symptoms from the medical report.';
+
+	var result = await langchain.navigator_summarize_dx(req.body.userId, promt, req.body.conversation, req.body.context);
+	if(result.response){
+		let data = {
+			nameFiles: req.body.nameFiles,
+			promt: promt,
+			role: 'Summarydx',
+			conversation: req.body.conversation,
+			context: req.body.context,
+			result: result.response
+		}
+		let nameurl = req.body.paramForm+'/summary.json';
+		f29azureService.createBlobSimple('data', nameurl, data);
+	}
+	res.status(200).send(result);
+}
+
 async function analizeDoc(req, res) {
 	res.status(200).send({message: 'ok'})
 	const containerName = req.body.containerName;
@@ -430,6 +459,7 @@ async function deleteDocumentAzure(patientId, documentId){
 module.exports = {
 	callNavigator,
 	callSummary,
+	callSummarydx,
 	form_recognizer,
 	createBook,
 	anonymizeBooks,

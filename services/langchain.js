@@ -317,7 +317,138 @@ async function navigator_summarize(userId, question, conversation, context){
   });
 }
 
+
+async function navigator_summarize_dx(userId, question, conversation, context){
+  return new Promise(async function (resolve, reject) {
+    try {
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+  
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        i++;
+      }
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
+      /*const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `Symptom-Only Summary:
+    
+        ${cleanPatientInfo}
+    
+        You are a medical expert. Your task is to analyze the medical documents of the patient and extract only the symptoms.`
+    );*/
+
+    const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+      `Symptom-Only Summary:
+  
+      ${cleanPatientInfo}
+  
+      Focus on extracting only the symptoms from the medical documents of the patient.`
+  );
+  
+    
+  
+      /*const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Please focus on the patient's medical report and list all the symptoms in a single paragraph. The summary should be in plain text, without HTML formatting.
+    
+        <input>
+        {input}
+        </input>
+    
+        Guidelines:
+        - Directly list the symptoms without any introductory phrases or additional explanations.
+        - Concentrate solely on the symptoms mentioned in the medical report.
+        - Compile the symptoms into one continuous, coherent paragraph.
+        - Exclude any mention of specific diseases, medications, genetic information, or test results.
+        - Keep the summary concise and directly relevant to understanding the patient's current symptoms.`
+    );*/
+
+    const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+      `List all the symptoms from the patient's medical report in a single, concise paragraph.
+  
+      <input>
+      {input}
+      </input>
+  
+      Guidelines:
+      - Directly list the symptoms without any introductory phrases or additional explanations.
+      - Ensure the symptoms are compiled into one coherent paragraph.
+      - Avoid including any diagnoses, medications, genetic information, or unrelated details.`
+  );
+  
+    
+  
+      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
+     
+      const pastMessages = [];      
+      if (conversation !== null) {
+        for (const message of conversation) {
+          // Check if message.content is not null and is a string
+          if (message.content && typeof message.content === 'string') {
+            if (message.role === 'user') {
+              pastMessages.push(new HumanMessage({ content: message.content }));
+            } else if (message.role === 'assistant') {
+              pastMessages.push(new AIMessage({ content: message.content }));
+            }
+        }
+        }
+      }
+      
+      const memory = new BufferMemory({
+        chatHistory: new ChatMessageHistory(pastMessages),
+        returnMessages: true,
+        memoryKey: "history"
+      });
+  
+      const chain = new ConversationChain({
+        memory: memory,
+        prompt: chatPrompt,
+        llm: claude2,
+      });
+
+      const chain_retry = chain.withRetry({
+        stopAfterAttempt: 3,
+      });
+
+      
+      let response;
+      try {
+        response = await chain_retry.invoke({
+          input: question,
+        });
+      } catch (error) {
+        if (error.message.includes('Error 429')) {
+          console.log("Rate limit exceeded, waiting and retrying...");
+          await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+          response = await chain_retry.invoke({
+            input: question,
+          });
+        } else {
+          throw error;
+        }
+      }
+  
+      // console.log(response);
+      resolve(response);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      resolve(respu);
+    }
+  });
+}
+
 module.exports = {
   navigator_chat,
   navigator_summarize,
+  navigator_summarize_dx
 };
