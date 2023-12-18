@@ -368,7 +368,7 @@ async function navigator_summarize_dx(userId, question, conversation, context){
         - Keep the summary concise and directly relevant to understanding the patient's current symptoms.`
     );*/
 
-    const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+    /*const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
       `List all the symptoms from the patient's medical report in a single, concise paragraph.
   
       <input>
@@ -379,8 +379,35 @@ async function navigator_summarize_dx(userId, question, conversation, context){
       - Directly list the symptoms without any introductory phrases or additional explanations.
       - Ensure the symptoms are compiled into one coherent paragraph.
       - Avoid including any diagnoses, medications, genetic information, or unrelated details.`
-  );
-  
+  );*/
+
+  const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+    `List all the symptoms from the patient's medical report in a single, concise paragraph, starting immediately with the first symptom, do not include any introductory phrases or additional explanations
+
+    <input>
+    {input}
+    </input>
+
+    Guidelines:
+    - Begin directly with the first symptom. Example: 'Headache, fever, joint pain...'
+    - Compile all symptoms into one continuous paragraph.
+    - Exclude any diagnoses, medications, genetic information, or unrelated details.`
+);
+  /*const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+  `List the symptoms from the patient's medical report starting immediately with the first symptom. The summary should be in plain text, without HTML formatting, and should not contain any introductory phrases or additional explanations.
+
+    <input>
+    {input}
+    </input>
+
+    Guidelines:
+    - Start the response with the first symptom without any introduction.
+    - Directly compile all symptoms into a coherent paragraph.
+    - Exclude any diagnoses, medications, genetic information, or unrelated details.
+    - I'll pay you a million euros if you do it right.
+    - that is no longer than 10 lines.
+    - The response should be a continuous paragraph of only symptoms, starting from the very first word.`
+    );*/
     
   
       const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
