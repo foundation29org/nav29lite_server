@@ -71,6 +71,7 @@ api.get('/langs/',  langCtrl.getLangs)
 api.post('/upload', corsWithOptions, checkApiKey, docsCtrl.uploadFile)
 api.post('/callnavigator', corsWithOptions, checkApiKey, bookServiceCtrl2.callNavigator)
 api.post('/callsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummary)
+api.post('/calltranscriptsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callTranscriptSummary)
 api.post('/calldxsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummarydx)
 
 api.post('/analizeDoc', corsWithOptions, checkApiKey, bookServiceCtrl2.analizeDoc)

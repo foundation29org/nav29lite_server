@@ -64,16 +64,40 @@ async function callSummary(req, res) {
 		followed by an introduction of the patient, a well-organized presentation of medical data in categories like diagnosis, treatment, medication, etc., 
 		and include any relevant additional information in the "Other" category.`;
 		
-	}else if(req.body.role=='transcript'){
-		promt = `Please provide a succinct summary of the conversation transcript. 
-		Focus on identifying and highlighting the main points discussed, any conclusions reached, and specific actions or recommendations mentioned. 
-		The summary should capture the essence of the conversation, making it easy for someone who did not participate in the conversation to understand its key outcomes and takeaways. 
-		Start by briefly describing the context of the conversation (Always start with: "This conversation involves [participants] discussing [main topic]"), 
-		followed by a clear and concise extraction of the most relevant points, 
-		and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
-		This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
-		
 	}
+	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
+	if(result.response){
+		let data = {
+			nameFiles: req.body.nameFiles,
+			promt: promt,
+			role: req.body.role,
+			conversation: req.body.conversation,
+			context: req.body.context,
+			result: result.response
+		}
+		let nameurl = req.body.paramForm+'/summary.json';
+		f29azureService.createBlobSimple('data', nameurl, data);
+	}
+	res.status(200).send(result);
+}
+
+async function callTranscriptSummary(req, res) {
+	/*let promt = `Please extract a rich set of information from the patient medical documents.
+	Everything that could be useful for an expert doctor to understand the patient's situation.
+	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
+	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
+	Starting with an overview of the documents type and its purposes, (Always start with: The documents you just uploaded are a [document type] and its purposes are to [purpose])
+	then continue with an introduction of the patient,
+	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
+	then if necessary, add non-medical information but relevant into the "Other" category.`;*/
+	let promt = `Please provide a succinct summary of the conversation transcript. 
+	Focus on identifying and highlighting the main points discussed, any conclusions reached, and specific actions or recommendations mentioned. 
+	The summary should capture the essence of the conversation, making it easy for someone who did not participate in the conversation to understand its key outcomes and takeaways. 
+	Start by briefly describing the context of the conversation (Always start with: "This conversation involves [participants] discussing [main topic]"), 
+	followed by a clear and concise extraction of the most relevant points, 
+	and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
+	This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
+
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	if(result.response){
 		let data = {
@@ -459,6 +483,7 @@ async function deleteDocumentAzure(patientId, documentId){
 module.exports = {
 	callNavigator,
 	callSummary,
+	callTranscriptSummary,
 	callSummarydx,
 	form_recognizer,
 	createBook,
