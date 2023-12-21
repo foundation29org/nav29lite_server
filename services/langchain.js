@@ -327,7 +327,8 @@ async function navigator_summarize_dx(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -489,6 +490,7 @@ async function categorize_docs(userId, content){
         - Other
 
         You ALWAYS ONLY have to return a JSON object with the ONLY ONE category of the document which fits the best and the relevant information.
+        In "patient" section only extract "age" and "gender" fields.
         Do not return anything outside the JSON brackets.
 
         Example Output: 
