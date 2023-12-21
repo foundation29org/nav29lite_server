@@ -74,8 +74,6 @@ api.post('/callsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSumm
 api.post('/calltranscriptsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callTranscriptSummary)
 api.post('/calldxsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummarydx)
 
-api.post('/analizeDoc', corsWithOptions, checkApiKey, bookServiceCtrl2.analizeDoc)
-
 //services OPENAI
 api.post('/callopenaicontext', corsWithOptions, checkApiKey, openAIserviceCtrl.callOpenAiContext)
 

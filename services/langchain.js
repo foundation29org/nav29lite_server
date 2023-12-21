@@ -1,8 +1,4 @@
 const { ChatOpenAI } = require("langchain/chat_models/openai");
-const { PromptTemplate } = require("langchain/prompts");
-const { loadSummarizationChain, LLMChain } = require("langchain/chains");
-const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
-const Events = require('../models/events')
 const config = require('../config')
 const pubsub = require('../services/pubsub');
 const translate = require('../services/translation');
@@ -11,7 +7,7 @@ const insights = require('../services/insights');
 const { Client } = require("langsmith")
 const { LangChainTracer } = require("langchain/callbacks");
 const { ChatBedrock } = require("langchain/chat_models/bedrock");
-const { ConversationChain } = require("langchain/chains");
+const { ConversationChain, LLMChain } = require("langchain/chains");
 const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder } = require("langchain/prompts");
 const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
 const { HumanMessage, AIMessage } = require("langchain/schema");
@@ -57,8 +53,8 @@ function createModels(projectName) {
 
   const claude2 = new ChatBedrock({
     model: "anthropic.claude-v2",
-    region: "us-east-1",
-    endpointUrl: "bedrock-runtime.us-east-1.amazonaws.com",
+    region: "eu-central-1",
+    endpointUrl: "bedrock-runtime.eu-central-1.amazonaws.com",
     credentials: {
        accessKeyId: BEDROCK_API_KEY,
        secretAccessKey: BEDROCK_API_SECRET,
@@ -102,7 +98,8 @@ async function navigator_chat(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -217,7 +214,8 @@ async function navigator_summarize(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -329,7 +327,8 @@ async function navigator_summarize_dx(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -474,8 +473,342 @@ async function navigator_summarize_dx(userId, question, conversation, context){
   });
 }
 
+async function categorize_docs(userId, content){
+  return new Promise(async function (resolve, reject) {
+    try {
+      systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `You will be provided with a medical document (delimited with input XML tags).
+        Your task is to categorize the document into one of the following categories and extract ALL the relevant information that is present in the document (if any):
+
+        - Clinical History
+        - Laboratory Report
+        - Hospital Discharge Note
+        - Evolution and Consultation Note
+        - Medical Prescription
+        - Surgery Report
+        - Imaging Study
+        - Other
+
+        You ALWAYS ONLY have to return a JSON object with the ONLY ONE category of the document which fits the best and the relevant information.
+        In "patient" section only extract "age" and "gender" fields.
+        Do not return anything outside the JSON brackets.
+
+        Example Output: 
+        {{
+          "category": "Clinical History",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "medical_history": {{
+            "previous_diseases": ["Disease1", "Disease2"],
+            "surgeries": ["Surgery1", "Surgery2"],
+            "allergies": ["Allergy1", "Allergy2"]
+          }},
+          "family_history": {{
+            "hereditary_diseases": ["Disease1", "Disease2"],
+            "family_history": ["History1", "History2"]
+          }},
+          "current_medications": [
+            {{
+              "name": "Medication1",
+              "dosage": "X mg",
+              "frequency": "X times a day".
+            }}
+          ],
+          "medical_procedures": ["Procedure1", "Procedure2" ]
+        }}
+
+        Other Examples:
+        {{
+          "category": "Laboratory Report",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "test_date": "YYYY-MM-DD",
+          "test_type": {{
+            "category": "Test_type",
+            "specificity": "Blood, urine, biopsy, etc."
+          }},
+          "key_results": [
+            {{
+              test_name": "Name of the test",
+              "value_obtained": "Value",
+              "reference_value": "Reference Value",
+              "observation": "Normal/Anormal".
+            }}
+          ],
+          "brief_interpretation": "Clinical interpretation of findings"
+        }}
+
+        {{
+          "category": "Hospital Discharge Note",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "admission_date": "YYYY-MM-DD",
+          "discharge_date": "YYYY-MM-DD",
+          "diagnosis_summary": [
+            {{
+              "diagnosis": "Diagnosis name",
+              "detail": "Detailed description of diagnosis".
+            }}
+          ],
+          "treatment_performed": {{
+            "procedures": ["Procedure1", "Procedure2" ],
+            "diagnostic_tests": ["Test1", "Test2"],
+            "medications": ["Medication1", "Medication2"]
+          }},
+          "medication_changes": [
+            {{
+              "medication": "Name of the Medication",
+              "change": "Description of change"
+            }}
+          ],
+          "follow-up_plan": "Post-discharge recommendations and steps to be taken"
+        }}
+        
+        {{
+          "category": "Evolution and Consultation Note",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "consultation_date": "YYYY-MM-DD",
+          "consultation_reason": "Description of the reason for consultation",
+          "clinical_findings": [
+            {{
+              "finding": "Name of the finding", 
+              "description": "Detailed description of the finding", 
+              "clinical_finding": "Detailed description of the finding",
+            }}
+          ],
+          "diagnosis": {{
+            "diagnostic_hypothesis": "Hypothesis or diagnostic conclusion", 
+            "details": "Additional information about the diagnosis", 
+          }},
+          "treatment_plan": {{
+            "medication": ["Medication1", "Medication2"],
+            "references": ["Reference1", "Reference2"],
+            "additional_tests": ["Test1", "Test2"]
+          }}
+        }}
+
+        {{
+          "category": "Medical Prescription",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "issue_date": "YYYY-MM-DD",
+          "medication_table": [
+            {{
+              "medication_name": "Medication_name",
+              "dosage": "X mg/u",
+              "frequency": "X times per day/week", 
+              "duration": "X days/weeks",
+              "indication": "Reason for prescribing the medicine".
+            }}
+          ],
+          "special_instructions": "Warnings, specific recommendations or precautions to be taken into account"
+        }}
+        
+        {{
+          "category": "Surgery Report",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "surgery_date": "YYYY-MM-DD",
+          "surgery_type": "Detailed description of the type of surgery performed",
+          "findings": [
+            {{
+              "finding": "Description of the finding",
+              "details": "Additional information about the finding".
+            }}
+          ],
+          "results_recommendations": {{
+            "results": "Description of the results of the surgery",
+            "postoperative_recommendations": "Recommended post-operative care and instructions"
+          }}
+        }}
+
+        {{
+          "category": "Imaging Study",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "study_date": "YYYY-MM-DD",
+          "image_type": "X-ray, ultrasound, MRI, etc.",
+          "key_findings": [
+            {{
+              "finding_description": "Description of key finding",
+              "location": "Location of the finding if relevant", 
+              "importance": "Clinical relevance of the finding".
+            }}
+          ],
+          "interpretation": "Comments and analysis by the radiologist or other specialist"
+        }}
+
+        {{"category": "Other"}}
+        `
+      );
+      
+      humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Here is the medical document to categorize and extract the relevant information:
+
+        <input document>
+        {doc}
+        </input document>
+        
+        Now, please output the category and the relevant information of the document in a JSON format.
+
+        Output:
+        `
+      );
+
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+
+      // Format and call the prompt to categorize each document
+      clean_doc = content.replace(/{/g, '{{').replace(/}/g, '}}');
+
+      chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt])
+
+      const categoryChain = new LLMChain({
+        prompt: chatPrompt,
+        llm: azure128k,
+      });
+
+      const category = await categoryChain.call({
+        doc: clean_doc,
+      });
+
+      console.log(category.text);
+
+      // Try to parse the JSON object category, if error clean the ```
+      let categoryJSON;
+      try {
+        categoryJSON = JSON.parse(category.text);
+      } catch (error) {
+        // Regular expression to match ```json at the start and ``` at the end
+        const regex = /^```json\n|\n```$/g;
+
+        // Replace the matched text with an empty string
+        const cleanedData = category.text.replace(regex, '');
+        categoryJSON = JSON.parse(cleanedData);
+      }
+      console.log(categoryJSON);
+      resolve(categoryJSON);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      reject(respu);
+    }
+  });
+}
+
+async function combine_categorized_docs(userId, context){
+  return new Promise(async function (resolve, reject) {
+    try {
+      systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `You will be provided with a list of medical documents (delimited with input XML tags).
+        Your task is to combine the information from all the documents into a single JSON object and output it.
+        The documents will be in the following categories:
+
+        - Clinical History
+        - Laboratory Report
+        - Hospital Discharge Note
+        - Evolution and Consultation Note
+        - Medical Prescription
+        - Surgery Report
+        - Imaging Study
+        - Other
+
+        You ALWAYS ONLY have to return a JSON object with the minimum common most relevant information of all the documents.
+        Do not return anything outside the JSON brackets.
+        `
+      );
+      
+      humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Here are the medical documents to combine and extract the relevant information:
+
+        <input documents>
+        {doc}
+        </input documents>
+        
+        Now, please output the minimum common most relevant information of all the documents in a JSON format.
+
+        Output:
+        `
+      );
+
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
+        i++;
+      }
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
+      chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt])
+
+      const categoryChain = new LLMChain({
+        prompt: chatPrompt,
+        llm: azure128k,
+      });
+
+      const category = await categoryChain.call({
+        doc: cleanPatientInfo,
+      });
+
+      console.log(category.text);
+
+      // Try to parse the JSON object category, if error clean the ```
+      let categoryJSON;
+      try {
+        categoryJSON = JSON.parse(category.text);
+      } catch (error) {
+        // Regular expression to match ```json at the start and ``` at the end
+        const regex = /^```json\n|\n```$/g;
+
+        // Replace the matched text with an empty string
+        const cleanedData = category.text.replace(regex, '');
+        categoryJSON = JSON.parse(cleanedData);
+      }
+      console.log(categoryJSON);
+      resolve(categoryJSON);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      reject(respu);
+    }
+  });
+}
+
 module.exports = {
   navigator_chat,
   navigator_summarize,
-  navigator_summarize_dx
+  navigator_summarize_dx,
+  categorize_docs,
+  combine_categorized_docs
 };
