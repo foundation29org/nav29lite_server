@@ -143,39 +143,7 @@ async function callSummarydx(req, res) {
 	res.status(200).send(result);
 }
 
-async function analizeDoc(req, res) {
-	res.status(200).send({message: 'ok'})
-	const containerName = req.body.containerName;
-	const url = req.body.url;
-	const documentId = req.body.documentId;
-	const filename = req.body.filename;
-	const patientId = req.body.patientId;
-	const userId = req.body.userId;
-	// si algún parametro no existe no se hace nada
-	//track this
-	if (!containerName || !url || !documentId || !filename || !patientId) {
-		return;
-	}
-	// Call the langchain function to summarize the document
-	langchain.summarize(patientId, containerName, url, documentId, filename, userId);
-	langchain.clean_and_extract(patientId, containerName, url, documentId, filename, userId);
-	// Call the Azure function to create the extraction questions
-	// extractEvents(patientId, documentId, containerName, url, filename, userId);
-	// Call the langchain function to anonymize the document
-	let isDonating = await isDonatingData(patientId);
-	if (isDonating) {
-		setStateAnonymizedDoc(documentId, 'inProcess')
-		let anonymized = await langchain.anonymize(patientId, containerName, url, documentId, filename, userId);
-		if (anonymized) {
-			setStateAnonymizedDoc(documentId, 'true')
-		} else {
-			setStateAnonymizedDoc(documentId, 'false')
-		}
-	}		
-}
-
-
-async function form_recognizer(documentId, containerName, url) {
+async function form_recognizer(userId, documentId, containerName, url) {
 	return new Promise(async function (resolve, reject) {
 		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
 		const modelId = "prebuilt-layout"; // replace with your model id
@@ -203,12 +171,17 @@ async function form_recognizer(documentId, containerName, url) {
 			  }
 			  await new Promise(resolve => setTimeout(resolve, 1000));
 			} while (true);
+			
 			// console.log(resultResponse);
+			// console.log(resultResponse.data.error.details);
 			let content = resultResponse.data.analyzeResult.content;
+
+			const category_summary = await langchain.categorize_docs(userId, content);
 	
 			var response = {
 			"msg": "done", 
-			"data": content, 
+			"data": content,
+			"summary": category_summary,
 			"doc_id": documentId, 
 			"status": 200
 			}
@@ -224,94 +197,6 @@ async function form_recognizer(documentId, containerName, url) {
 	  }
 	);
   }
-
-async function createBook(documentId, containerName, url, filename) {
-	return new Promise(async function (resolve, reject) {
-		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
-		const configcall = {
-			params: {
-				doc_id: documentId,
-				url: url2,
-				urlanalizeDoc: url,
-				filename: filename,
-				containerName: containerName
-			}
-		};
-		axios.post(config.KUBERNETEURL + '/triggerExtractLite', null, configcall)
-			.then(async response => {
-				const tokens = countTokens.countTokens(response.data.data);
-				response.data.tokens = tokens;
-				resolve(response.data);
-			})
-			.catch(error => {
-				insights.error(error);
-				console.error(error);
-				var respu = {
-					"msg": error,
-					"status": 500
-				}
-				resolve(respu);
-			});
-		});
-}
-
-async function extractEvents(patientId, documentId, containerName, url, filename, userId) {
-	return new Promise(async function (resolve, reject) {
-		var url2 = "https://" + accountname + ".blob.core.windows.net/" + containerName + "/" + url + sas;
-		const configcall = {
-			params: {
-				index: patientId,
-				doc_id: documentId,
-				url: url2,
-				filename: filename,
-				userId: userId,
-			}
-		};
-		axios.post(config.AF29URL + '/api/HttpTriggerCreateCustomBook', null, configcall)
-			.then(response => {
-				try {
-					// const jsonObject = JSON.parse(response.data.table);
-					resolve(response.data);
-				} catch (error) {
-					insights.error(error);
-					var respu = {
-						"msg": error,
-						"status": 500
-					}
-					resolve(respu);
-				}
-
-			})
-			.catch(error => {
-				pubsub.sendToUser(userId, { "docId": documentId, "status": "error extractEvents", "filename": filename, "error": error })
-				insights.error(error);
-				console.error(error);
-				var respu = {
-					"msg": error,
-					"status": 500
-				}
-				resolve(respu);
-			});
-	});
-}
-
-async function isDonatingData(patientId) {
-	return new Promise(async function (resolve, reject) {
-		Patient.findById(patientId, { "_id": false, "createdBy": false }, (err, patient) => {
-			if (err) resolve(false)
-			if (patient) {
-				if (patient.donation) {
-					resolve(true);
-				} else {
-					resolve(false);
-				}
-			} else {
-				resolve(false);
-			}
-
-		})
-	});
-}
 
 async function anonymizeBooks(documents) {
 	return new Promise(async function (resolve, reject) {
@@ -486,10 +371,7 @@ module.exports = {
 	callTranscriptSummary,
 	callSummarydx,
 	form_recognizer,
-	createBook,
 	anonymizeBooks,
 	deleteBook,
-	extractEvents,
 	anonymizeDocument,
-	analizeDoc
 }
