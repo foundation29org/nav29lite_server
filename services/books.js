@@ -66,6 +66,7 @@ async function callSummary(req, res) {
 		
 	}
 	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
+	// var result = await langchain.combine_categorized_docs(req.body.userId, req.body.context);
 	if(result.response){
 		let data = {
 			nameFiles: req.body.nameFiles,

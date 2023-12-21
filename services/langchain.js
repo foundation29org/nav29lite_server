@@ -53,8 +53,8 @@ function createModels(projectName) {
 
   const claude2 = new ChatBedrock({
     model: "anthropic.claude-v2",
-    region: "us-east-1",
-    endpointUrl: "bedrock-runtime.us-east-1.amazonaws.com",
+    region: "eu-central-1",
+    endpointUrl: "bedrock-runtime.eu-central-1.amazonaws.com",
     credentials: {
        accessKeyId: BEDROCK_API_KEY,
        secretAccessKey: BEDROCK_API_SECRET,
@@ -98,7 +98,8 @@ async function navigator_chat(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -213,7 +214,8 @@ async function navigator_summarize(userId, question, conversation, context){
       let cleanPatientInfo = "";
       let i = 1;
       for (const doc of context) {
-        cleanPatientInfo += "<Complete Document " + i + ">\n" + doc + "</Complete Document " + i + ">\n";
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
         i++;
       }
       
@@ -654,13 +656,13 @@ async function categorize_docs(userId, content){
       );
       
       humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
-        `Here is the medical document to categorize:
+        `Here is the medical document to categorize and extract the relevant information:
 
         <input document>
         {doc}
         </input document>
         
-        Now, please output the category of the document in a JSON format.
+        Now, please output the category and the relevant information of the document in a JSON format.
 
         Output:
         `
@@ -712,9 +714,99 @@ async function categorize_docs(userId, content){
   });
 }
 
+async function combine_categorized_docs(userId, context){
+  return new Promise(async function (resolve, reject) {
+    try {
+      systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `You will be provided with a list of medical documents (delimited with input XML tags).
+        Your task is to combine the information from all the documents into a single JSON object and output it.
+        The documents will be in the following categories:
+
+        - Clinical History
+        - Laboratory Report
+        - Hospital Discharge Note
+        - Evolution and Consultation Note
+        - Medical Prescription
+        - Surgery Report
+        - Imaging Study
+        - Other
+
+        You ALWAYS ONLY have to return a JSON object with the minimum common most relevant information of all the documents.
+        Do not return anything outside the JSON brackets.
+        `
+      );
+      
+      humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Here are the medical documents to combine and extract the relevant information:
+
+        <input documents>
+        {doc}
+        </input documents>
+        
+        Now, please output the minimum common most relevant information of all the documents in a JSON format.
+
+        Output:
+        `
+      );
+
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
+        i++;
+      }
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
+      chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt])
+
+      const categoryChain = new LLMChain({
+        prompt: chatPrompt,
+        llm: azure128k,
+      });
+
+      const category = await categoryChain.call({
+        doc: cleanPatientInfo,
+      });
+
+      console.log(category.text);
+
+      // Try to parse the JSON object category, if error clean the ```
+      let categoryJSON;
+      try {
+        categoryJSON = JSON.parse(category.text);
+      } catch (error) {
+        // Regular expression to match ```json at the start and ``` at the end
+        const regex = /^```json\n|\n```$/g;
+
+        // Replace the matched text with an empty string
+        const cleanedData = category.text.replace(regex, '');
+        categoryJSON = JSON.parse(cleanedData);
+      }
+      console.log(categoryJSON);
+      resolve(categoryJSON);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      reject(respu);
+    }
+  });
+}
+
 module.exports = {
   navigator_chat,
   navigator_summarize,
   navigator_summarize_dx,
   categorize_docs,
+  combine_categorized_docs
 };
