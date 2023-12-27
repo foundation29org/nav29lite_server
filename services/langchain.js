@@ -316,6 +316,119 @@ async function navigator_summarize(userId, question, conversation, context){
 }
 
 
+async function navigator_summarizeTranscript(userId, question, conversation, context, title){
+  return new Promise(async function (resolve, reject) {
+    try {
+      // Create the models
+      const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+  
+      // Format and call the prompt
+      let cleanPatientInfo = "";
+      let i = 1;
+      for (const doc of context) {
+        let docText = JSON.stringify(doc);
+        cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
+        i++;
+      }
+      
+      cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
+      const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+        `This is the list of the medical information of the patient:
+  
+        ${cleanPatientInfo}
+  
+        You are a medical expert, based on this context with the medical documents from the patient.`
+      );
+  
+      const humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+        `Take a deep breath and work on this problem step-by-step.      
+        Please, answer the following question/task with the information you have in context:
+  
+        <input>
+        {input}
+        </input>
+        
+        Don't make up any information.
+        Your response should:
+        - Be formatted in simple, single-line HTML without line breaks inside elements.
+        - Exclude escape characters like '\\n' within HTML elements.
+        - Avoid unnecessary characters around formatting such as triple quotes around HTML.
+        - Be patient-friendly, minimizing medical jargon.
+        
+        Example of desired HTML format (this is just a formatting example, not related to the input):
+        
+        <output example>
+        <div><h3>${title}</h3><p>This is a placeholder paragraph summarizing the key points. It should be concise and clear.</p><ul><li>Key Point 1</li><li>Key Point 2</li><li>Key Point 3</li></ul><p>Final remarks or conclusion here.</p></div>
+        </output example>`
+      );
+  
+      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
+     
+      const pastMessages = [];      
+      if (conversation !== null) {
+        for (const message of conversation) {
+          // Check if message.content is not null and is a string
+          if (message.content && typeof message.content === 'string') {
+            if (message.role === 'user') {
+              pastMessages.push(new HumanMessage({ content: message.content }));
+            } else if (message.role === 'assistant') {
+              pastMessages.push(new AIMessage({ content: message.content }));
+            }
+        }
+        }
+      }
+      
+      const memory = new BufferMemory({
+        chatHistory: new ChatMessageHistory(pastMessages),
+        returnMessages: true,
+        memoryKey: "history"
+      });
+  
+      const chain = new ConversationChain({
+        memory: memory,
+        prompt: chatPrompt,
+        llm: azure128k,
+      });
+
+      const chain_retry = chain.withRetry({
+        stopAfterAttempt: 3,
+      });
+
+      
+      let response;
+      try {
+        response = await chain_retry.invoke({
+          input: question,
+        });
+      } catch (error) {
+        if (error.message.includes('Error 429')) {
+          console.log("Rate limit exceeded, waiting and retrying...");
+          await new Promise(resolve => setTimeout(resolve, 20000)); // Wait for 20 seconds
+          response = await chain_retry.invoke({
+            input: question,
+          });
+        } else {
+          throw error;
+        }
+      }
+  
+      // console.log(response);
+      resolve(response);
+    } catch (error) {
+      console.log("Error happened: ", error)
+      insights.error(error);
+      var respu = {
+        "msg": error,
+        "status": 500
+      }
+      resolve(respu);
+    }
+  });
+}
+
+
 async function navigator_summarize_dx(userId, question, conversation, context){
   return new Promise(async function (resolve, reject) {
     try {
@@ -808,6 +921,7 @@ async function combine_categorized_docs(userId, context){
 module.exports = {
   navigator_chat,
   navigator_summarize,
+  navigator_summarizeTranscript,
   navigator_summarize_dx,
   categorize_docs,
   combine_categorized_docs
