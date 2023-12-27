@@ -99,7 +99,32 @@ async function callTranscriptSummary(req, res) {
 	and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
 	This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
 
-	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
+	let promt2 = `Please summarize the transcribed conversation, structuring the summary around the following key points:
+
+	1. Reason for Consultation: Briefly detail the primary reason for initiating the conversation.
+	
+	2. Personal Background: Provide a summary of relevant personal background information mentioned during the conversation.
+	
+	3. Symptoms: List and describe the symptoms discussed, highlighting those that are most significant or recurrent.
+
+	4. Complementary Tests: Describe any additional tests or examinations that were discussed as part of the diagnostic process.
+	
+	5. Possible Diagnosis: Identify and summarize any potential diagnoses that emerged during the conversation.
+	
+	6. Plan: Conclude with the plans, actions, or recommendations agreed upon, based on the analysis and discussions carried out.
+	
+	This summary should capture the conversation's most relevant aspects clearly and concisely, allowing for an easy understanding of the dialogue's flow and conclusions. Focus on how each of these points is developed and interconnected throughout the conversation.`;
+
+
+	let promises = [
+		langchain.navigator_summarizeTranscript(req.body.userId, promt, req.body.conversation, req.body.context, 'Summary of the conversation'),
+		langchain.navigator_summarizeTranscript(req.body.userId, promt2, req.body.conversation, req.body.context, 'Structured summary to paste in the medical record')
+	];
+	
+	// Utilizar Promise.all para esperar a que todas las promesas se resuelvan
+	let [result, result2] = await Promise.all(promises);
+
+	//var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
 	if(result.response){
 		let data = {
 			nameFiles: req.body.nameFiles,
@@ -112,7 +137,24 @@ async function callTranscriptSummary(req, res) {
 		let nameurl = req.body.paramForm+'/summary.json';
 		f29azureService.createBlobSimple('data', nameurl, data);
 	}
-	res.status(200).send(result);
+
+	if(result2.response){
+		let data = {
+			nameFiles: req.body.nameFiles,
+			promt: promt,
+			role: req.body.role,
+			conversation: req.body.conversation,
+			context: req.body.context,
+			result: result2.response
+		}
+		let nameurl = req.body.paramForm+'/summaryv2.json';
+		f29azureService.createBlobSimple('data', nameurl, data);
+	}
+
+	//return result and result2
+	//res.status(200).send({result:{result, result2}});
+	res.status(200).send({result, result2});
+	//res.status(200).send(result);
 }
 
 async function callSummarydx(req, res) {
