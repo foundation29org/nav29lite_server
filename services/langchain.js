@@ -534,9 +534,11 @@ async function categorize_docs(userId, content){
           "key_results": [
             {{
               test_name": "Name of the test",
-              "value_obtained": "Value",
-              "reference_value": "Reference Value",
-              "observation": "Normal/Anormal".
+              "result": [
+                "Value",
+                "Reference Value",
+                "Observation, Normal/Anormal, etc."
+              ]
             }}
           ],
           "brief_interpretation": "Clinical interpretation of findings"
