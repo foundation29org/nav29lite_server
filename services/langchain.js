@@ -748,7 +748,15 @@ async function categorize_docs(userId, content){
           "interpretation": "Comments and analysis by the radiologist or other specialist"
         }}
 
-        {{"category": "Other"}}
+        {{"category": "Other",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "document": "Document name or purpose (anything that can help to identify the document)",
+          "details": "Main description of the document and their relevance to the patient, does not have to be inherently medical, maybe administrative or for a caregiver",
+          "other": "Other relevant information about the document, can be anything that does not fit in the other categories"
+        }}
         `
       );
       
