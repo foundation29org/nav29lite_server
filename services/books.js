@@ -58,9 +58,9 @@ async function callSummary(req, res) {
 		
 	}
 
-	let prompt2 = `Please create a JSON timeline from the patient's medical documents and events, with keys for 'date' and 'key_medical_event'.
-	 Extract main medical events from the documents and events, and add them to the timeline.
-	 The timeline should be structured as a list of events, with each event containing a date and an small description of the event.
+	let prompt2 = `Please create a JSON timeline from the patient's medical documents and individual events, with keys for 'date', 'eventType' and 'keyMedicalEvent'.
+	 Extract main medical events from the documents and individual events, and add them to the timeline. EventType could only be 'diagnosis', 'treatment', 'test'.
+	 The timeline should be structured as a list of events, with each individual event containing a date, type and an small description of the event.
 	`
 
 	// var result = await langchain.navigator_summarize(req.body.userId, promt, req.body.conversation, req.body.context);
