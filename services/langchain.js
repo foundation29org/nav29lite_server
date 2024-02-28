@@ -11,6 +11,7 @@ const { ConversationChain, LLMChain } = require("langchain/chains");
 const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder } = require("langchain/prompts");
 const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
 const { HumanMessage, AIMessage } = require("langchain/schema");
+const countTokens = require( '@anthropic-ai/tokenizer'); 
 
 const AZURE_OPENAI_API_KEY = config.OPENAI_API_KEY;
 const OPENAI_API_KEY = config.OPENAI_API_KEY_J;
@@ -29,7 +30,7 @@ function createModels(projectName) {
     client
   });
   
-  const model = new ChatOpenAI({
+  const azuregpt4 = new ChatOpenAI({
     modelName: "gpt-4-0613",
     azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
@@ -40,7 +41,7 @@ function createModels(projectName) {
     callbacks: [tracer],
   });
   
-  const model32k = new ChatOpenAI({
+  const azure32k = new ChatOpenAI({
     modelName: "gpt-4-32k-0613",
     azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
@@ -83,7 +84,7 @@ function createModels(projectName) {
     callbacks: [tracer],
   });
   
-  return { model, model32k, claude2, model128k, azure128k };
+  return { azuregpt4, azure32k, claude2, model128k, azure128k };
 }
 
 // This function will be a basic conversation with documents (context)
@@ -92,7 +93,7 @@ async function navigator_chat(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -208,7 +209,7 @@ async function navigator_summarize(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -251,30 +252,9 @@ async function navigator_summarize(userId, question, conversation, context){
         </output example>`
       );
   
-      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, new MessagesPlaceholder("history"), humanMessagePrompt]);
-     
-      const pastMessages = [];      
-      if (conversation !== null) {
-        for (const message of conversation) {
-          // Check if message.content is not null and is a string
-          if (message.content && typeof message.content === 'string') {
-            if (message.role === 'user') {
-              pastMessages.push(new HumanMessage({ content: message.content }));
-            } else if (message.role === 'assistant') {
-              pastMessages.push(new AIMessage({ content: message.content }));
-            }
-        }
-        }
-      }
-      
-      const memory = new BufferMemory({
-        chatHistory: new ChatMessageHistory(pastMessages),
-        returnMessages: true,
-        memoryKey: "history"
-      });
+      const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt]);
   
-      const chain = new ConversationChain({
-        memory: memory,
+      const chain = new LLMChain({
         prompt: chatPrompt,
         llm: azure128k,
       });
@@ -321,7 +301,7 @@ async function navigator_summarizeTranscript(userId, question, conversation, con
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -434,7 +414,7 @@ async function navigator_summarize_dx(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -647,9 +627,11 @@ async function categorize_docs(userId, content){
           "key_results": [
             {{
               test_name": "Name of the test",
-              "value_obtained": "Value",
-              "reference_value": "Reference Value",
-              "observation": "Normal/Anormal".
+              "result": [
+                "Value",
+                "Reference Value",
+                "Observation, Normal/Anormal, etc."
+              ]
             }}
           ],
           "brief_interpretation": "Clinical interpretation of findings"
@@ -766,7 +748,15 @@ async function categorize_docs(userId, content){
           "interpretation": "Comments and analysis by the radiologist or other specialist"
         }}
 
-        {{"category": "Other"}}
+        {{"category": "Other",
+          "patient": {{
+            "age": "XX",
+            "gender": "X"
+          }},
+          "document": "Document name or purpose (anything that can help to identify the document)",
+          "details": "Main description of the document and their relevance to the patient, does not have to be inherently medical, maybe administrative or for a caregiver",
+          "other": "Other relevant information about the document, can be anything that does not fit in the other categories"
+        }}
         `
       );
       
@@ -785,16 +775,22 @@ async function categorize_docs(userId, content){
 
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
 
       // Format and call the prompt to categorize each document
       clean_doc = content.replace(/{/g, '{{').replace(/}/g, '}}');
 
       chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt])
+      
+      const tokens = countTokens.countTokens(clean_doc);
 
+      let selectedModel = tokens > 30000 ? azure128k : azure32k;
+      
+      console.log("Tokens: ", tokens, "Model: ", selectedModel);
+      
       const categoryChain = new LLMChain({
         prompt: chatPrompt,
-        llm: azure128k,
+        llm: selectedModel,
       });
 
       const category = await categoryChain.call({
@@ -866,7 +862,7 @@ async function combine_categorized_docs(userId, context){
 
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { model, model32k, claude2, model128k, azure128k } = createModels(projectName);
+      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
 
       // Format and call the prompt
       let cleanPatientInfo = "";

@@ -31,17 +31,9 @@ async function callNavigator(req, res) {
 }
 
 async function callSummary(req, res) {
-	/*let promt = `Please extract a rich set of information from the patient medical documents.
-	Everything that could be useful for an expert doctor to understand the patient's situation.
-	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
-	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
-	Starting with an overview of the documents type and its purposes, (Always start with: The documents you just uploaded are a [document type] and its purposes are to [purpose])
-	then continue with an introduction of the patient,
-	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
-	then if necessary, add non-medical information but relevant into the "Other" category.`;*/
-	let promt = '';
+	let prompt = '';
 	if(req.body.role=='physician'){
-		promt = `Please provide a comprehensive and detailed summary of the patient's medical documents. 
+		prompt = `Please provide a comprehensive and detailed summary of the patient's medical documents. 
 		Include all relevant clinical data, diagnoses, treatment plans, and medications, ensuring the information is precise and thorough for expert medical analysis. 
 		The summary should facilitate a deep understanding of the patient's medical situation, suitable for a healthcare professional. 
 		Start with an overview of the document type and its purposes (Always start with: "The documents you just uploaded are a [document type] and its purposes are to [purpose]"), 
@@ -49,7 +41,7 @@ async function callSummary(req, res) {
 		and include any pertinent non-medical information in the "Other" category.`;
 		
 	}else if(req.body.role=='young'){
-		promt = `Please create a simple and engaging summary of the patient's medical documents, tailored for a young audience. 
+		prompt = `Please create a simple and engaging summary of the patient's medical documents, tailored for a young audience. 
 		Use clear and straightforward language to explain the patient's medical situation, including any diagnoses and treatments. 
 		The summary should be informative yet easy to understand, enabling a pediatric patient to grasp their health status and ask questions. 
 		Begin with a basic explanation of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and they are important because [purpose]"), 
@@ -57,7 +49,7 @@ async function callSummary(req, res) {
 		and any other relevant information in an easy-to-understand "Other" category.`;
 		
 	}else if(req.body.role=='adult'){
-		promt = `Please generate a clear and concise summary of the patient's medical documents, suitable for an adult audience. 
+		prompt = `Please generate a clear and concise summary of the patient's medical documents, suitable for an adult audience. 
 		The summary should include essential information about diagnoses, treatments, and medications, presented in a way that is easy to understand for a non-expert. 
 		Aim to empower the patient with knowledge about their medical situation to facilitate informed discussions with healthcare providers. 
 		Start with a brief overview of the document type and its purpose (Always start with: "The documents you just uploaded are a [document type] and they help to explain [purpose]"), 
@@ -65,41 +57,97 @@ async function callSummary(req, res) {
 		and include any relevant additional information in the "Other" category.`;
 		
 	}
-	var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
-	// var result = await langchain.combine_categorized_docs(req.body.userId, req.body.context);
-	if(result.response){
+
+	let prompt2 = `Please create a JSON timeline from the patient's medical documents and individual events, with keys for 'date', 'eventType' and 'keyMedicalEvent'.
+	 Extract main medical events from the documents and individual events, and add them to the timeline. EventType could only be 'diagnosis', 'treatment', 'test'.
+	 The timeline should be structured as a list of events, with each individual event containing a date, type and an small description of the event.
+	`
+
+	// var result = await langchain.navigator_summarize(req.body.userId, promt, req.body.conversation, req.body.context);
+	let timeline = true;
+	let promises = [
+		azureFuncSummary(req, prompt),
+		azureFuncSummary(req, prompt2, timeline)
+	];
+	
+	// Utilizar Promise.all para esperar a que todas las promesas se resuelvan
+	let [result, result2] = await Promise.all(promises);
+
+	if(result.data){
 		let data = {
 			nameFiles: req.body.nameFiles,
-			promt: promt,
+			promt: prompt,
 			role: req.body.role,
 			conversation: req.body.conversation,
 			context: req.body.context,
-			result: result.response
+			result: result.data
 		}
 		let nameurl = req.body.paramForm+'/summary.json';
 		f29azureService.createBlobSimple('data', nameurl, data);
 	}
-	res.status(200).send(result);
-}
 
+	if(result2.data){
+		let data = {
+			nameFiles: req.body.nameFiles,
+			promt: prompt2,
+			role: req.body.role,
+			conversation: req.body.conversation,
+			context: req.body.context,
+			result: result2.data
+		}
+		let nameurl = req.body.paramForm+'/timeline.json';
+		f29azureService.createBlobSimple('data', nameurl, data);
+	}
+
+	let finalResult = {
+		"msg": "done", 
+		"result1": result.data,
+		"result2": result2.data,
+		"status": 200
+		}
+
+	res.status(200).send(finalResult);
+	}
+// 	)
+// 		.catch(error => {
+// 			console.error(error);
+// 			res.status(500).send({ message: error })
+// 		});
+// }
+
+async function azureFuncSummary(req, prompt, timeline=false){
+    return new Promise(async function (resolve, reject) {
+        const functionUrl = config.AF29URL + `/api/HttpTriggerSummarizer?code=${config.functionKey}`;
+        axios.post(functionUrl, req.body.context, {
+            params: {
+                prompt: prompt,
+                userId: req.body.userId,
+				timeline: timeline
+            },
+            headers: {
+                'Content-Type': 'application/json'
+            },
+        }).then(async response => {
+            resolve(response);
+        }).catch(error => {
+          console.error("Error:", error);
+          reject(error);
+        });
+    });
+}
+ 
 async function callTranscriptSummary(req, res) {
-	/*let promt = `Please extract a rich set of information from the patient medical documents.
-	Everything that could be useful for an expert doctor to understand the patient's situation.
-	But also every that could be useful for the patient to understand his situation. And to be able to ask questions about it.
-	The goal of this is to store the information in a clean way so that it can be used for further analysis in the future.  
-	Starting with an overview of the documents type and its purposes, (Always start with: The documents you just uploaded are a [document type] and its purposes are to [purpose])
-	then continue with an introduction of the patient,
-	then extract all the medical information and sort it into all the possible general categories (e.g. diagnosis, treatment, medication, etc.),
-	then if necessary, add non-medical information but relevant into the "Other" category.`;*/
-	let promt = `Please provide a succinct summary of the conversation transcript. 
+	let prompt = `Please provide a succinct summary of the conversation transcript. 
 	Focus on identifying and highlighting the main points discussed, any conclusions reached, and specific actions or recommendations mentioned. 
 	The summary should capture the essence of the conversation, making it easy for someone who did not participate in the conversation to understand its key outcomes and takeaways. 
 	Start by briefly describing the context of the conversation (Always start with: "This conversation involves [participants] discussing [main topic]"), 
 	followed by a clear and concise extraction of the most relevant points, 
 	and conclude with any agreed-upon actions, decisions, or important remarks made during the discussion. 
-	This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.`;
+	This summary is intended to provide a quick and comprehensive understanding of the conversation's content and conclusions.
+	
+	H3 Summary title: Summary of the conversation`;
 
-	let promt2 = `Please summarize the transcribed conversation, structuring the summary around the following key points:
+	let prompt2 = `Please summarize the transcribed conversation, structuring the summary around the following key points:
 
 	1. Reason for Consultation: Briefly detail the primary reason for initiating the conversation.
 	
@@ -113,48 +161,58 @@ async function callTranscriptSummary(req, res) {
 	
 	6. Plan: Conclude with the plans, actions, or recommendations agreed upon, based on the analysis and discussions carried out.
 	
-	This summary should capture the conversation's most relevant aspects clearly and concisely, allowing for an easy understanding of the dialogue's flow and conclusions. Focus on how each of these points is developed and interconnected throughout the conversation.`;
+	This summary should capture the conversation's most relevant aspects clearly and concisely, allowing for an easy understanding of the dialogue's flow and conclusions. Focus on how each of these points is developed and interconnected throughout the conversation.
+	
+	H3 Summary title: Structured summary to paste in the medical record`;
 
+
+	// let promises = [
+	// 	langchain.navigator_summarizeTranscript(req.body.userId, promt, req.body.conversation, req.body.context, 'Summary of the conversation'),
+	// 	langchain.navigator_summarizeTranscript(req.body.userId, promt2, req.body.conversation, req.body.context, 'Structured summary to paste in the medical record')
+	// ];
 
 	let promises = [
-		langchain.navigator_summarizeTranscript(req.body.userId, promt, req.body.conversation, req.body.context, 'Summary of the conversation'),
-		langchain.navigator_summarizeTranscript(req.body.userId, promt2, req.body.conversation, req.body.context, 'Structured summary to paste in the medical record')
+		azureFuncSummary(req, prompt),
+		azureFuncSummary(req, prompt2)
 	];
 	
 	// Utilizar Promise.all para esperar a que todas las promesas se resuelvan
 	let [result, result2] = await Promise.all(promises);
 
-	//var result = await langchain.navigator_summarize(req.body.userId,promt, req.body.conversation, req.body.context);
-	if(result.response){
+	if(result.data){
 		let data = {
 			nameFiles: req.body.nameFiles,
-			promt: promt,
+			promt: prompt,
 			role: req.body.role,
 			conversation: req.body.conversation,
 			context: req.body.context,
-			result: result.response
+			result: result.data
 		}
 		let nameurl = req.body.paramForm+'/summary.json';
 		f29azureService.createBlobSimple('data', nameurl, data);
 	}
 
-	if(result2.response){
+	if(result2.data){
 		let data = {
 			nameFiles: req.body.nameFiles,
-			promt: promt,
+			promt: prompt2,
 			role: req.body.role,
 			conversation: req.body.conversation,
 			context: req.body.context,
-			result: result2.response
+			result: result2.data
 		}
 		let nameurl = req.body.paramForm+'/summaryv2.json';
 		f29azureService.createBlobSimple('data', nameurl, data);
 	}
 
-	//return result and result2
-	//res.status(200).send({result:{result, result2}});
-	res.status(200).send({result, result2});
-	//res.status(200).send(result);
+	let finalResult = {
+		"msg": "done", 
+		"result1": result.data,
+		"result2": result2.data,
+		"status": 200
+		}
+
+	res.status(200).send(finalResult);
 }
 
 async function callSummarydx(req, res) {
