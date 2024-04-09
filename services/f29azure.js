@@ -1,23 +1,17 @@
 'use strict'
 
-const crypt = require('./crypt')
 const config = require('../config')
-const request = require('request')
 const storage = require("@azure/storage-blob")
 const insights = require('../services/insights')
 const accountname = config.BLOB.NAMEBLOB;
 const key = config.BLOB.KEY;
 const sharedKeyCredentialGenomics = new storage.StorageSharedKeyCredential(accountname, key);
 const blobServiceClientGenomics = new storage.BlobServiceClient(
-  // When using AnonymousCredential, following url should include a valid SAS or support public access
   `https://${accountname}.blob.core.windows.net`,
   sharedKeyCredentialGenomics
 );
 
 var azure = require('azure-storage');
-
-const User = require('../models/user')
-const Patient = require('../models/patient')
 
 var blobService = azure
   .createBlobService(accountname, key);

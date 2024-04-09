@@ -1,10 +1,5 @@
-// functions for each call of the api on social-info. Use the social-info model
-
 'use strict'
 
-// add the social-info model
-const Document = require('../../../models/document')
-const crypt = require('../../../services/crypt')
 const bookService = require("../../../services/books")
 const insights = require('../../../services/insights')
 const f29azureService = require("../../../services/f29azure")
