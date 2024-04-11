@@ -11,7 +11,7 @@ Summary29 server
     padding-right: 1% !important;
     padding-bottom: 0.1% !important;">
 	<div align="right">
-		<img width="150px" src="/img/logo-foundation-twentynine-footer.png">
+		<img width="150px" src="https://dxgpt.app/assets/img/logo-foundation-twentynine-footer.png">
 	</div>
 	<div align="right" style="padding-top: 0.5% !important">
 		<p align="right">	
