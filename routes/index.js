@@ -6,7 +6,6 @@ const express = require('express')
 const langCtrl = require('../controllers/all/lang')
 
 const translationCtrl = require('../services/translation')
-const openAIserviceCtrl = require('../services/openai')
 const bookServiceCtrl2 = require('../services/books')
 const docsCtrl = require('../controllers/user/patient/documents')
 const taCtrl = require('../services/ta')
@@ -73,9 +72,6 @@ api.post('/callnavigator', corsWithOptions, checkApiKey, bookServiceCtrl2.callNa
 api.post('/callsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummary)
 api.post('/calltranscriptsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callTranscriptSummary)
 api.post('/calldxsummary', corsWithOptions, checkApiKey, bookServiceCtrl2.callSummarydx)
-
-//services OPENAI
-api.post('/callopenaicontext', corsWithOptions, checkApiKey, openAIserviceCtrl.callOpenAiContext)
 
 //translations
 api.post('/getDetectLanguage', corsWithOptions, checkApiKey, translationCtrl.getDetectLanguage)
