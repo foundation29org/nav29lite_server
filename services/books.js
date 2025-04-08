@@ -115,22 +115,18 @@ async function callSummary(req, res) {
 
 async function azureFuncSummary(req, prompt, timeline=false){
     return new Promise(async function (resolve, reject) {
-        const functionUrl = config.AF29URL + `/api/HttpTriggerSummarizer?code=${config.functionKey}`;
-        axios.post(functionUrl, req.body.context, {
-            params: {
-                prompt: prompt,
-                userId: req.body.userId,
-				timeline: timeline
-            },
-            headers: {
-                'Content-Type': 'application/json'
-            },
-        }).then(async response => {
-            resolve(response);
-        }).catch(error => {
-          console.error("Error:", error);
-          reject(error);
-        });
+        try {
+            const result = await langchain.navigator_summarize_azure(
+                req.body.userId, 
+                prompt, 
+                req.body.context, 
+                timeline
+            );
+            resolve(result);
+        } catch (error) {
+            console.error("Error:", error);
+            reject(error);
+        }
     });
 }
  
