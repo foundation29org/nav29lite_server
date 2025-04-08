@@ -8,10 +8,8 @@ const { ConversationChain, LLMChain } = require("langchain/chains");
 const { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder } = require("langchain/prompts");
 const { BufferMemory, ChatMessageHistory } = require("langchain/memory");
 const { HumanMessage, AIMessage } = require("langchain/schema");
-const countTokens = require( '@anthropic-ai/tokenizer'); 
 
 const AZURE_OPENAI_API_KEY = config.OPENAI_API_KEY;
-const OPENAI_API_KEY = config.OPENAI_API_KEY_J;
 const OPENAI_API_VERSION = config.OPENAI_API_VERSION;
 const OPENAI_API_BASE = config.OPENAI_API_BASE;
 const client = new Client({
@@ -25,17 +23,6 @@ function createModels(projectName) {
   const tracer = new LangChainTracer({
     projectName: projectName,
     client
-  });
-  
-  const azure32k = new ChatOpenAI({
-    modelName: "gpt-4-32k-0613",
-    azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
-    azureOpenAIApiVersion: OPENAI_API_VERSION,
-    azureOpenAIApiInstanceName: OPENAI_API_BASE,
-    azureOpenAIApiDeploymentName: "test32k",
-    temperature: 0,
-    timeout: 500000,
-    callbacks: [tracer],
   });
 
   const claude2 = new ChatBedrock({
@@ -56,13 +43,13 @@ function createModels(projectName) {
     azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
     azureOpenAIApiInstanceName: OPENAI_API_BASE,
-    azureOpenAIApiDeploymentName: "nav29turbo",
+    azureOpenAIApiDeploymentName: "summary29",
     temperature: 0,
     timeout: 500000,
     callbacks: [tracer],
   });
   
-  return { azure32k, claude2, azure128k };
+  return { claude2, azure128k };
 }
 
 // This function will be a basic conversation with documents (context)
@@ -544,6 +531,118 @@ async function navigator_summarize_dx(userId, question, conversation, context){
   });
 }
 
+async function navigator_summarize_azure(userId, prompt, context, timeline=false) {
+    try {
+        const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
+        const { azure128k } = createModels(projectName);
+        
+        // Format and call the prompt
+        let cleanPatientInfo = "";
+        let i = 1;
+        for (const doc of context) {
+            let docText = JSON.stringify(doc);
+            cleanPatientInfo += "<Complete Document " + i + ">\n" + docText + "</Complete Document " + i + ">\n";
+            i++;
+        }
+        
+        cleanPatientInfo = cleanPatientInfo.replace(/{/g, '{{').replace(/}/g, '}}');
+
+        const systemMessagePrompt = SystemMessagePromptTemplate.fromTemplate(
+            `This is the list of the medical information of the patient:\n\n` +
+            `${cleanPatientInfo}\n\n` +
+            `You are a medical expert, based on this context with the medical documents from the patient.`
+        );
+
+        let humanMessagePrompt;
+        if (timeline) {
+            humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+                `Take a deep breath and work on this problem step-by-step.      
+                Please, answer the following question/task with the information you have in context:
+        
+                <input>
+                {input}
+                </input>
+                
+                Don't make up any information.
+                Your response should:
+                - Be formatted in simple, single-line JSON.
+                - Be patient-friendly, minimizing medical jargon.
+                - Use ISO 8601 date format for dates (YYYY-MM-DD), if no day is available, use the first day of that month (YYYY-MM-01).
+                - Extract whether the event is still relevant/present to the patient life or is a past event.
+                
+                Example of desired JSON format (this is just a formatting example, not related to the input):
+                
+                <output>
+                [
+                    {{
+                        "date": "YYYY-MM-DD",
+                        "present": "true",
+                        "eventType": "diagnosis",
+                        "keyMedicalEvent": "Example medical event"
+                    }}
+                ]
+                </output>
+                
+                Always use the <output> tag to encapsulate the JSON response.`
+            );
+        } else {
+            humanMessagePrompt = HumanMessagePromptTemplate.fromTemplate(
+                `Take a deep breath and work on this problem step-by-step.      
+                Please, answer the following question/task with the information you have in context:
+        
+                <input>
+                {input}
+                </input>
+                
+                Don't make up any information.
+                Your response should:
+                - Be formatted in simple, single-line HTML without line breaks inside elements.
+                - Exclude escape characters like '\\n' within HTML elements.
+                - Avoid unnecessary characters around formatting such as triple quotes around HTML.
+                - Be patient-friendly, minimizing medical jargon.
+                
+                Example of desired HTML format (this is just a formatting example, not related to the input):
+                
+                <output example>
+                <div><h5>Example Summary Title</h5><p>This is a placeholder paragraph summarizing the key points. It should be concise and clear.</p><ul><li>Key Point 1</li><li>Key Point 2</li><li>Key Point 3</li></ul><p>Final remarks or conclusion here.</p></div>
+                </output example>`
+            );
+        }
+
+        const chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt]);
+        
+        const chain = new LLMChain({
+            prompt: chatPrompt,
+            llm: azure128k,
+        });
+
+        const result = await chain.invoke({
+            input: prompt
+        });
+
+        if (timeline) {
+            // Extraer el JSON de las etiquetas <output>
+            const matches = result.text.match(/<output>(.*?)<\/output>/s);
+            if (matches && matches[1]) {
+                try {
+                    const jsonData = JSON.parse(matches[1].trim());
+                    return { data: jsonData };
+                } catch (error) {
+                    throw new Error("Error parsing JSON from output");
+                }
+            } else {
+                return { data: [] };
+            }
+        } else {
+            return { data: result.text };
+        }
+
+    } catch (error) {
+        console.error("Error:", error);
+        throw error;
+    }
+}
+
 async function categorize_docs(userId, content){
   return new Promise(async function (resolve, reject) {
     try {
@@ -753,22 +852,17 @@ async function categorize_docs(userId, content){
 
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azure32k,azure128k } = createModels(projectName);
+      let { azure128k } = createModels(projectName);
 
       // Format and call the prompt to categorize each document
       clean_doc = content.replace(/{/g, '{{').replace(/}/g, '}}');
 
       chatPrompt = ChatPromptTemplate.fromMessages([systemMessagePrompt, humanMessagePrompt])
-      
-      const tokens = countTokens.countTokens(clean_doc);
 
-      let selectedModel = tokens > 30000 ? azure128k : azure32k;
-      
-      console.log("Tokens: ", tokens, "Model: ", selectedModel);
       
       const categoryChain = new LLMChain({
         prompt: chatPrompt,
-        llm: selectedModel,
+        llm: azure128k,
       });
 
       const category = await categoryChain.call({
@@ -897,6 +991,7 @@ module.exports = {
   navigator_summarize,
   navigator_summarizeTranscript,
   navigator_summarize_dx,
+  navigator_summarize_azure,
   categorize_docs,
   combine_categorized_docs
 };
