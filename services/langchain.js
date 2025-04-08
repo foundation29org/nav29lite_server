@@ -27,17 +27,6 @@ function createModels(projectName) {
     client
   });
   
-  const azuregpt4 = new ChatOpenAI({
-    modelName: "gpt-4-0613",
-    azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
-    azureOpenAIApiVersion: OPENAI_API_VERSION,
-    azureOpenAIApiInstanceName: OPENAI_API_BASE,
-    azureOpenAIApiDeploymentName: "nav29",
-    temperature: 0,
-    timeout: 500000,
-    callbacks: [tracer],
-  });
-  
   const azure32k = new ChatOpenAI({
     modelName: "gpt-4-32k-0613",
     azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
@@ -63,14 +52,6 @@ function createModels(projectName) {
     callbacks: [tracer],
   });
 
-  const model128k = new ChatOpenAI({
-    modelName: "gpt-4-1106-preview",
-    openAIApiKey: OPENAI_API_KEY,
-    temperature: 0,
-    timeout: 500000,
-    callbacks: [tracer],
-  });
-
   const azure128k = new ChatOpenAI({
     azureOpenAIApiKey: AZURE_OPENAI_API_KEY,
     azureOpenAIApiVersion: OPENAI_API_VERSION,
@@ -81,7 +62,7 @@ function createModels(projectName) {
     callbacks: [tracer],
   });
   
-  return { azuregpt4, azure32k, claude2, model128k, azure128k };
+  return { azure32k, claude2, azure128k };
 }
 
 // This function will be a basic conversation with documents (context)
@@ -90,7 +71,7 @@ async function navigator_chat(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -206,7 +187,7 @@ async function navigator_summarize(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -298,7 +279,7 @@ async function navigator_summarizeTranscript(userId, question, conversation, con
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { azure128k } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -411,7 +392,7 @@ async function navigator_summarize_dx(userId, question, conversation, context){
     try {
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { claude2 } = createModels(projectName);
   
       // Format and call the prompt
       let cleanPatientInfo = "";
@@ -772,7 +753,7 @@ async function categorize_docs(userId, content){
 
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { azure32k,azure128k } = createModels(projectName);
 
       // Format and call the prompt to categorize each document
       clean_doc = content.replace(/{/g, '{{').replace(/}/g, '}}');
@@ -859,7 +840,7 @@ async function combine_categorized_docs(userId, context){
 
       // Create the models
       const projectName = `LITE - ${config.LANGSMITH_PROJECT} - ${userId}`;
-      let { azuregpt4, azure32k, claude2, openai128k, azure128k } = createModels(projectName);
+      let { azure128k } = createModels(projectName);
 
       // Format and call the prompt
       let cleanPatientInfo = "";
