@@ -10,6 +10,7 @@ const fileUpload = require('express-fileupload');
 const app = express()
 app.use(compression());
 const serviceEmail = require('./services/email')
+const emailThrottle = require('./utils/emailThrottle')
 const api = require ('./routes')
 const path = require('path')
 const config= require('./config')
@@ -24,19 +25,26 @@ function setCrossDomain(req, res, next) {
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Access-Control-Allow-Origin, Accept, Accept-Language, Origin, User-Agent, x-api-key');
     next();
   }else{
-     //send email
      const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
      const requestInfo = {
          method: req.method,
          url: req.url,
          headers: req.headers,
          origin: origin,
-         body: req.body, // Asegúrate de que el middleware para parsear el cuerpo ya haya sido usado
+         body: req.body,
          ip: clientIp,
          params: req.params,
          query: req.query,
        };
-     serviceEmail.sendMailControlCall(requestInfo)
+     
+     // Solo enviar email si pasa el throttle
+     if (emailThrottle.shouldSendEmail(clientIp, requestInfo)) {
+       const aggregatedInfo = emailThrottle.getAggregatedInfo(clientIp);
+       requestInfo.attemptCount = aggregatedInfo.attemptCount;
+       requestInfo.previousAttempts = aggregatedInfo.attempts;
+       serviceEmail.sendMailControlCall(requestInfo);
+     }
+     
      res.status(401).json({ error: 'Origin not allowed' });
   }
 }
