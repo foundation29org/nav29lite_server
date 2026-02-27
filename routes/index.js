@@ -9,8 +9,6 @@ const translationCtrl = require('../services/translation')
 const bookServiceCtrl2 = require('../services/books')
 const docsCtrl = require('../controllers/user/patient/documents')
 const cors = require('cors');
-const serviceEmail = require('../services/email')
-const emailThrottle = require('../utils/emailThrottle')
 
 const api = express.Router()
 const config= require('../config')
@@ -26,26 +24,6 @@ const whitelist = config.allowedOrigins;
         if (whitelist.includes(origin)) {
           callback(null, true);
         } else {
-            const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-            const requestInfo = {
-                method: req.method,
-                url: req.url,
-                headers: req.headers,
-                origin: origin,
-                body: req.body,
-                ip: clientIp,
-                params: req.params,
-                query: req.query,
-              };
-            
-            // Solo enviar email si pasa el throttle
-            if (emailThrottle.shouldSendEmail(clientIp, requestInfo)) {
-              const aggregatedInfo = emailThrottle.getAggregatedInfo(clientIp);
-              requestInfo.attemptCount = aggregatedInfo.attemptCount;
-              requestInfo.previousAttempts = aggregatedInfo.attempts;
-              serviceEmail.sendMailControlCall(requestInfo);
-            }
-            
             callback(new Error('Not allowed by CORS'));
         }
       },
@@ -70,12 +48,6 @@ const whitelist = config.allowedOrigins;
 
 // lang routes, using the controller lang, this controller has methods
 api.get('/langs/',  langCtrl.getLangs)
-
-// Ruta opcional para ver estadísticas de intentos bloqueados (protegida con API key)
-api.get('/security/stats', checkApiKey, (req, res) => {
-  const stats = emailThrottle.getStats();
-  res.status(200).json(stats);
-})
 
 
 // documentsCtrl routes, using the controller documents, this controller has methods
